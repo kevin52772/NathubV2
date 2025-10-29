@@ -1,17 +1,96 @@
--- 🔧 Auto Unfavorite All Items Script
--- Gunakan hanya di game milikmu sendiri!
+-- 🔒 Server-Side: UnfavoriteHandler.lua
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local DataStoreService = game:GetService("DataStoreService")
 
-local player = game.Players.LocalPlayer
-local data = player:FindFirstChild("Inventory") or player:WaitForChild("Inventory")
+local RequestUnfavoriteAll = ReplicatedStorage:WaitForChild("RequestUnfavoriteAll")
+local InventoryStore = DataStoreService:GetDataStore("PlayerInventoryData")
 
--- Misal data favorit tersimpan di setiap item dengan property: item.IsFavorited = true/false
-local count = 0
+-- 🧑‍💻 Ganti UserId kamu di sini (developer/admin yang diizinkan)
+local ALLOWED_USERS = {
+	[12345678] = true, -- contoh: UserId kamu
+}
 
-for _, item in pairs(data:GetChildren()) do
-    if item:FindFirstChild("IsFavorited") and item.IsFavorited.Value == true then
-        item.IsFavorited.Value = false
-        count += 1
-    end
+-- ✅ Fungsi: Muat inventory dari DataStore
+local function loadInventory(player)
+	local success, data = pcall(function()
+		return InventoryStore:GetAsync(player.UserId)
+	end)
+	if success and data then
+		return data
+	else
+		warn("Gagal memuat inventory untuk " .. player.Name)
+		return {}
+	end
 end
 
-print("✅ Unfavorited " .. count .. " items successfully!")
+-- 💾 Fungsi: Simpan inventory ke DataStore
+local function saveInventory(player, data)
+	local success, err = pcall(function()
+		InventoryStore:SetAsync(player.UserId, data)
+	end)
+	if not success then
+		warn("Gagal menyimpan inventory: " .. tostring(err))
+	else
+		print("✅ Inventory pemain " .. player.Name .. " tersimpan ke DataStore.")
+	end
+end
+
+-- 🔄 Fungsi: Hapus semua status favorit
+local function unfavoriteAllItems(player)
+	local data = loadInventory(player)
+	if not data or typeof(data) ~= "table" then
+		return 0
+	end
+
+	local count = 0
+	for _, item in pairs(data) do
+		if item.IsFavorited == true then
+			item.IsFavorited = false
+			count += 1
+		end
+	end
+
+	saveInventory(player, data)
+	return count
+end
+
+-- 🚀 Event: Dijalankan oleh admin via RemoteEvent
+RequestUnfavoriteAll.OnServerEvent:Connect(function(player)
+	if not ALLOWED_USERS[player.UserId] then
+		warn(player.Name .. " mencoba unfavorite semua item tanpa izin.")
+		return
+	end
+
+	local count = unfavoriteAllItems(player)
+	RequestUnfavoriteAll:FireClient(player, {
+		success = true,
+		count = count
+	})
+end)
+-- LocalScript (Client)
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RequestUnfavoriteAll = ReplicatedStorage:WaitForChild("RequestUnfavoriteAll")
+
+-- Buat tombol sederhana
+local playerGui = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+local screenGui = Instance.new("ScreenGui", playerGui)
+local button = Instance.new("TextButton")
+button.Size = UDim2.new(0, 220, 0, 50)
+button.Position = UDim2.new(0.5, -110, 0.9, -25)
+button.Text = "🧹 Unfavorite Semua Item"
+button.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+button.TextColor3 = Color3.fromRGB(255, 255, 255)
+button.Parent = screenGui
+
+-- Klik tombol → kirim permintaan ke server
+button.MouseButton1Click:Connect(function()
+	RequestUnfavoriteAll:FireServer()
+end)
+
+-- Terima respon dari server
+RequestUnfavoriteAll.OnClientEvent:Connect(function(response)
+	if response and response.success then
+		print("✅ " .. response.count .. " item berhasil di-unfavorite dan disimpan ke DataStore.")
+	end
+end)
