@@ -1,0 +1,17 @@
+-- 🔧 Auto Unfavorite All Items Script
+-- Gunakan hanya di game milikmu sendiri!
+
+local player = game.Players.LocalPlayer
+local data = player:FindFirstChild("Inventory") or player:WaitForChild("Inventory")
+
+-- Misal data favorit tersimpan di setiap item dengan property: item.IsFavorited = true/false
+local count = 0
+
+for _, item in pairs(data:GetChildren()) do
+    if item:FindFirstChild("IsFavorited") and item.IsFavorited.Value == true then
+        item.IsFavorited.Value = false
+        count += 1
+    end
+end
+
+print("✅ Unfavorited " .. count .. " items successfully!")
