@@ -247,8 +247,8 @@ end
 
 -- Window
 local Window = l:CreateWindow({
-    Title = "Skidzz - Plants vs Brainrots",
-    Author = "Skidzz",
+    Title = "KIMAK HUB - BERAK DULU BOS",
+    Author = "Kimak-HUB",
     Size = UDim2.fromOffset(500, 390),
     Transparent = true,
     Theme = "Sky",
@@ -273,7 +273,7 @@ local Collect = Window:Tab({Title = "Auto", Icon = "crown"})
 Window:SelectTab(1)
 
 Main:Section({Title = "Auto Farm", Icon = "crown"})
-Main:Section({Title = "Use on PRIVATE SERVERS only!", Icon = "badge-alert"})
+Main:Section({Title = "LU KAN BEGOK!", Icon = "badge-alert"})
 
 -- Auto Farm
 Main:Toggle({
