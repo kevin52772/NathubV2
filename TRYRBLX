@@ -1,566 +1,1599 @@
--- Waits until the game is loaded to run the script
-repeat task.wait() until game:IsLoaded()
-
-if setfpscap then
-    setfpscap(240)
-else
-    warn("Your exploit does not support setfpscap.")
-end
-
--- Library
-local l = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
-
--- Services
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Players = game:GetService("Players")
-local UserInputService = game:GetService("UserInputService")
-local Workspace = game:GetService("Workspace")
-local RunService = game:GetService("RunService")
-
-local LocalPlayer = Players.LocalPlayer
-local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
-local Humanoid = Character:WaitForChild("Humanoid")
-local Backpack = LocalPlayer:WaitForChild("Backpack")
-
--- Settings
-local AutoEquipBest = false
-local AutoFarm = false
-local AutoEquipDelay = 10
-local ClickInterval = 0.25
-local HeldToolName = "Basic Bat"
-local SellPlant = false
-local SellBrainrot = false
-local SellEverything = false
-local CurrentStickyTarget = nil
-
--- Cooldowns for Auto Attack
-local Cooldowns = {
-    LastAttack = 0,
-    AttackCooldown = 0.15
-}
-
--- Shop items
-local shop = {
-    seedList = {
-        "Cactus Seed",
-        "Strawberry Seed",
-        "Pumpkin Seed",
-        "Sunflower Seed",
-        "Dragon Seed",
-        "Eggplant Seed",
-        "Watermelon Seed",
-        "Cocotank Seed",
-        "Carnivorous Plant Seed",
-        "Mr Carrot Seed",
-        "Tomatrio Seed",
-        "Shroombino Seed"
-    },
-    gearList = {
-        "Water Bucket",
-        "Frost Grenade",
-        "Banana Gun",
-        "Frost Blower",
-        "Carrot Launcher"
-    }
-}
-
--- Variables
-local selectedSeeds = {}
-local selectedGears = {}
-local AutoBuySelectedSeed = false
-local AutoBuySelectedGear = false
-local AutoBuyAllSeed = false
-local AutoBuyAllGear = false
-
--- Plot Utils
-local PlotUtils = {
-    CachedPlot = nil,
-
-    GetPlot = function(self)
-        if (self.CachedPlot) then return self.CachedPlot end
-        for i,v in pairs(Workspace.Plots:GetChildren()) do
-            if (v:GetAttribute("Owner") == LocalPlayer.Name) then
-                self.CachedPlot = v
-                return v
-            end
-        end
-    end,
-
-    IsWithinPlot = function(self, entity)
-        local plot = self:GetPlot()
-        if not plot then return false end
-        local plotname = plot.Name
-        local entityplot = entity:GetAttribute("Plot")
-
-        entityplot = tonumber(entityplot)
-        plotname = tonumber(plotname)
-
-        if (entityplot == plotname) then
-            return true
-        end
-
-        return false
-    end,
-
-    GetClosestChild = function(self, folder)
-        if (HumanoidRootPart == nil) then return nil end
-        local closestentity = nil
-        local closestdist = math.huge
-        for i,v in pairs(folder:GetChildren()) do
-            if (self:IsWithinPlot(v) == false) then continue end
-            local hitbox = v:FindFirstChild("HumanoidRootPart") or v:FindFirstChild("Hitbox") or v.PrimaryPart
-            if not hitbox then continue end
-            local dist = (hitbox.Position - HumanoidRootPart.Position).Magnitude
-            if (dist < closestdist) then
-                closestdist = dist
-                closestentity = v
-            end
-        end
-
-        return closestentity
-    end,
-
-    GetClosestMissionChild = function(self, folder)
-        if (HumanoidRootPart == nil) then return nil end
-        local closestentity = nil
-        local closestdist = math.huge
-        for i,v in pairs(folder:GetChildren()) do
-            if (self:IsWithinPlot(v) == false) then continue end
-            local hitbox = v:FindFirstChild("HumanoidRootPart") or v:FindFirstChild("Hitbox") or v.PrimaryPart
-            if not hitbox then continue end
-            local dist = (hitbox.Position - HumanoidRootPart.Position).Magnitude
-            if (dist < closestdist) then
-                closestdist = dist
-                closestentity = v
-            end
-        end
-
-        return closestentity
-    end,
-}
-
--- Helper functions
-local function GetMyPlot()
-    for _, plot in ipairs(Workspace.Plots:GetChildren()) do
-        local playerSign = plot:FindFirstChild("PlayerSign")
-        if playerSign then
-            local bg = playerSign:FindFirstChild("BillboardGui")
-            local textLabel = bg and bg:FindFirstChild("TextLabel")
-            if textLabel and (textLabel.Text == LocalPlayer.Name or textLabel.Text == LocalPlayer.DisplayName) then
-                return plot
-            end
-        end
-    end
-    return nil
-end
-
-local function GetMyPlotName()
-    local plot = GetMyPlot()
-    return plot and plot.Name or "No Plot"
-end
-
-local function GetMoney()
-    local leaderstats = LocalPlayer:FindFirstChild("leaderstats")
-    return leaderstats and leaderstats:FindFirstChild("Money") and leaderstats.Money.Value or 0
-end
-
-local function GetRebirth()
-    local gui = LocalPlayer.PlayerGui:FindFirstChild("Main")
-    if gui and gui:FindFirstChild("Rebirth") then
-        local text = gui.Rebirth.Frame.Title.Text or "Rebirth 0"
-        local n = tonumber(text:match("%d+")) or 0
-        return math.max(0, n - 1)
-    end
-    return 0
-end
-
-local function FormatTime(sec)
-    local h = math.floor(sec / 3600)
-    local m = math.floor((sec % 3600) / 60)
-    local s = sec % 60
-    return string.format("%02d:%02d:%02d", h, m, s)
-end
-
--- Safe remote getters
-local function GetRemotesFolder()
-    return ReplicatedStorage:FindFirstChild("Remotes")
-end
-
-local function GetNearestBrainrot()
-    local target = PlotUtils:GetClosestChild(Workspace.ScriptedMap.Brainrots)
-    if target then
-        return target
-    end
-    return PlotUtils:GetClosestMissionChild(Workspace.ScriptedMap.MissionBrainrots)
-end
-
--- Utility
-local function EquipBat()
-    for _, tool in ipairs(Backpack:GetChildren()) do
-        if tool:IsA("Tool") and string.find(tool.Name:lower(), "bat") then
-            HeldToolName = tool.Name
-            Humanoid:EquipTool(tool)
-            return true
-        end
-    end
-    for _, tool in ipairs(Character:GetChildren()) do
-        if tool:IsA("Tool") and string.find(tool.Name:lower(), "bat") then
-            HeldToolName = tool.Name
-            return true
-        end
-    end
-    return false
-end
-
--- FIXED: Teleport to hitbox 0,0,0
-local function StickyTeleportToBrainrot(brainrot)
-    local hitbox = brainrot and (brainrot:FindFirstChild("HumanoidRootPart") or brainrot:FindFirstChild("Hitbox") or brainrot.PrimaryPart)
-    if hitbox and hitbox:IsA("BasePart") then
-        -- Teleport to exact hitbox position (0,0,0 relative to hitbox)
-        local targetCFrame = CFrame.new(hitbox.Position)
-        HumanoidRootPart.CFrame = targetCFrame
-        return true
-    end
-    return false
-end
-
--- Auto Attack function
-local function AttackEntity()
-    local target = GetNearestBrainrot()
-    if target then
-        EquipBat()
-        local args
-        if PlotUtils:GetClosestChild(Workspace.ScriptedMap.Brainrots) == target then
-            args = { {NormalBrainrots = {target.Name}, MissionBrainrots = {}} }
-        elseif target:GetAttribute("ID") then
-            args = { {NormalBrainrots = {}, MissionBrainrots = {target:GetAttribute("ID")}} }
-        end
-        if args then
-            local combatEvent = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("AttacksServer"):WaitForChild("WeaponAttack")
-            combatEvent:FireServer(unpack(args))
-        end
-        return true
-    end
-    return false
-end
-
--- Window
-local Window = l:CreateWindow({
-    Title = "KIMAK HUB - BERAK DULU BOS",
-    Author = "Kimak-HUB",
-    Size = UDim2.fromOffset(500, 390),
-    Transparent = true,
-    Theme = "Sky",
-    Resizable = true,
-    SideBarWidth = 150,
-    BackgroundImageTransparency = 0.8,
-    HideSearchBar = true,
-    ScrollBarEnabled = true,
-    User = {
-        Enabled = false,
-        Anonymous = false,
-        Callback = function() end,
-    },
-})
-
--- Tabs
-local Main = Window:Tab({Title = "Main", Icon = "house"})
-local Sell = Window:Tab({Title = "Sell", Icon = "dollar-sign"})
-local Shop = Window:Tab({Title = "Shop", Icon = "shopping-cart"})
-local Collect = Window:Tab({Title = "Auto", Icon = "crown"})
-
-Window:SelectTab(1)
-
-Main:Section({Title = "Auto Farm", Icon = "crown"})
-Main:Section({Title = "LU KAN BEGOK!", Icon = "badge-alert"})
-
--- Auto Farm
-Main:Toggle({
-    Title = "Auto Farm",
-    Desc = "Teleports to exact 0,0,0 of hitbox and attacks the nearest Brainrot/Mission Brainrot in your plot",
-    Default = false,
-    Callback = function(v)
-        AutoFarm = v
-        CurrentStickyTarget = nil
-        PlotUtils.CachedPlot = nil -- Reset plot cache
-
-        if v then
-            if not EquipBat() then
-                l:Notify({
-                    Title = "Error",
-                    Description = "No bat tool found in inventory!",
-                    Duration = 5
-                })
-                AutoFarm = false
-                return
-            end
-
-            -- Auto Equip
-            task.spawn(function()
-                while AutoFarm do
-                    if Character and not Character:FindFirstChild(HeldToolName) then
-                        if not EquipBat() then
-                            l:Notify({
-                                Title = "Error",
-                                Description = "No bat tool found in inventory!",
-                                Duration = 5
-                            })
-                            AutoFarm = false
-                            break
-                        end
-                    end
-                    task.wait(0.5)
-                end
-            end)
-
-            -- CONSTANT STICKY TELEPORT LOOP - EXACT HITBOX POSITION
-            task.spawn(function()
-                while AutoFarm do
-                    if not Character or not HumanoidRootPart or not Humanoid or Humanoid.Health <= 0 then
-                        CurrentStickyTarget = nil
-                        task.wait(0.1)
-                        continue
-                    end
-
-                    -- Update target if current is invalid
-                    if not CurrentStickyTarget or not CurrentStickyTarget.Parent or not PlotUtils:IsWithinPlot(CurrentStickyTarget) then
-                        CurrentStickyTarget = GetNearestBrainrot()
-                    end
-
-                    -- Constantly teleport to current target - EXACT POSITION
-                    if CurrentStickyTarget then
-                        StickyTeleportToBrainrot(CurrentStickyTarget)
-                    end
-                    task.wait()
-                end
-            end)
-
-            -- Auto Attack Loop
-            task.spawn(function()
-                while AutoFarm do
-                    if not Character or not HumanoidRootPart or not Humanoid or Humanoid.Health <= 0 then
-                        CurrentStickyTarget = nil
-                        task.wait(0.5)
-                        continue
-                    end
-
-                    local currentTime = tick()
-                    if currentTime - Cooldowns.LastAttack >= Cooldowns.AttackCooldown then
-                        Cooldowns.AttackCooldown = math.random(0.15, 0.23)
-                        Cooldowns.LastAttack = currentTime
-                        AttackEntity()
-                    end
-                    task.wait(0.1)
-                end
-            end)
-        else
-            CurrentStickyTarget = nil
-            if Character and Humanoid then
-                Humanoid:UnequipTools()
-            end
-        end
-    end
-})
-
--- Auto Equip Best
-Collect:Section({Title = "Auto Equip", Icon = "star"})
-
-Collect:Slider({
-    Title = "Auto Equip Delay (sec)",
-    Description = "Set delay time between equipping best brainrots",
-    Value = {Min = 5, Max = 60, Default = 10},
-    Step = 1,
-    Callback = function(val)
-        AutoEquipDelay = val
-    end
-})
-
-Collect:Toggle({
-    Title = "Auto Equip Best Brainrots",
-    Description = "Automatically equips the best brainrots",
-    Default = false,
-    Callback = function(state)
-        AutoEquipBest = state
-        if state then
-            task.spawn(function()
-                while AutoEquipBest do
-                    pcall(function()
-                        local equipRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("EquipBestBrainrots")
-                        equipRemote:FireServer()
-                    end)
-                    task.wait(AutoEquipDelay)
-                end
-            end)
-        end
-    end
-})
-
--- Sell
-Sell:Section({Title = "Auto Sell", Icon = "dollar-sign"})
-
-Sell:Toggle({
-    Title = "Sell Brainrot All",
-    Default = false,
-    Callback = function(state)
-        SellBrainrot = state
-    end
-})
-
-Sell:Toggle({
-    Title = "Sell Plants All",
-    Default = false,
-    Callback = function(state)
-        SellPlant = state
-    end
-})
-
-Sell:Section({Title = "Sell Everything", Icon = "gem"})
-
-Sell:Toggle({
-    Title = "Sell Both All",
-    Default = false,
-    Callback = function(state)
-        SellEverything = state
-    end
-})
-
--- Shop UI
-Shop:Section({Title = "Buy Seed", Icon = "leaf"})
-
-Shop:Dropdown({
-    Title = "Select Seed",
-    Values = shop.seedList,
-    Multi = true,
-    Callback = function(values)
-        selectedSeeds = values
-    end
-})
-
-Shop:Toggle({
-    Title = "Auto Buy Seed (Selected)",
-    Default = false,
-    Callback = function(state)
-        AutoBuySelectedSeed = state
-        if state then
-            task.spawn(function()
-                while AutoBuySelectedSeed do
-                    for _, seed in ipairs(selectedSeeds) do
-                        pcall(function()
-                            local buyRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("BuyItem")
-                            buyRemote:FireServer(seed, true)
-                        end)
-                        task.wait(0.5)
-                    end
-                    task.wait(1)
-                end
-            end)
-        end
-    end
-})
-
-Shop:Toggle({
-    Title = "Auto Buy Seed (All)",
-    Default = false,
-    Callback = function(state)
-        AutoBuyAllSeed = state
-        if state then
-            task.spawn(function()
-                while AutoBuyAllSeed do
-                    for _, seed in ipairs(shop.seedList) do
-                        pcall(function()
-                            local buyRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("BuyItem")
-                            buyRemote:FireServer(seed, true)
-                        end)
-                        task.wait(0.5)
-                    end
-                    task.wait(1)
-                end
-            end)
-        end
-    end
-})
-
-Shop:Section({Title = "Buy Gear", Icon = "package"})
-
-Shop:Dropdown({
-    Title = "Select Gear",
-    Values = shop.gearList,
-    Multi = true,
-    Callback = function(values)
-        selectedGears = values
-    end
-})
-
-Shop:Toggle({
-    Title = "Auto Buy Gear (Selected)",
-    Default = false,
-    Callback = function(state)
-        AutoBuySelectedGear = state
-        if state then
-            task.spawn(function()
-                while AutoBuySelectedGear do
-                    for _, gear in ipairs(selectedGears) do
-                        pcall(function()
-                            local buyRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("BuyGear")
-                            buyRemote:FireServer(gear, true)
-                        end)
-                        task.wait(0.5)
-                    end
-                    task.wait(1)
-                end
-            end)
-        end
-    end
-})
-
-Shop:Toggle({
-    Title = "Auto Buy Gear (All)",
-    Default = false,
-    Callback = function(state)
-        AutoBuyAllGear = state
-        if state then
-            task.spawn(function()
-                while AutoBuyAllGear do
-                    for _, gear in ipairs(shop.gearList) do
-                        pcall(function()
-                            local buyRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("BuyGear")
-                            buyRemote:FireServer(gear, true)
-                        end)
-                        task.wait(0.5)
-                    end
-                    task.wait(1)
-                end
-            end)
-        end
-    end
-})
-
--- Selling loop
-task.spawn(function()
-    while task.wait(0.69) do
-        if SellBrainrot or SellPlant or SellEverything then
-            pcall(function()
-                local sellRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("ItemSell")
-                sellRemote:FireServer()
-            end)
-        end
-    end
+-- This file was generated with UnveilR 2.1.4 at discord.gg/threaded or discord.gg/aqfudJEEeE.
+local fenv = getfenv()
+local args = {...}
+local var1 = game:HttpGet("https://raw.githubusercontent.com/NoLag-id/No-Lag-HUB/refs/heads/main/Loader/Main.lua")
+local var2, var3 = loadstring("repeat task.wait() until game:IsLoaded() and game:GetService(\"Players\") and game:GetService(\"Players\").LocalPlayer and game:GetService(\"Players\").LocalPlayer.Character\n--[[if game.placeId == 127742093697776 then\n    loadstring(game:HttpGet(\"https://api.luarmor.net/files/v3/loaders/f0652d5d8288eb119ed2704a08d1618f.lua\"))()\n    return\nend]]\nlocal scripts = {\n    [126884695634066] = \"7a953911595e67e8494c3d3446b8be5b\",\n    [124977557560410] = \"7a953911595e67e8494c3d3446b8be5b\", \n    [126509999114328] = \"c67687e7d7ae30e2e9fd5658f34e8292\",\n    [137925884276740] = \"2729679a8bec2bdc0cf738bc9be2610c\",\n    [103754275310547] = \"57417a00f716dc2a604af0c07a3a6187\",\n    [86076978383613] = \"57417a00f716dc2a604af0c07a3a6187\",\n    [121864768012064] = \"8d8bfb27b22bab287e8034de117b4de6\",\n    [127742093697776] = \"f0652d5d8288eb119ed2704a08d1618f\",\n}\nlocal Players = game:GetService(\"Players\")\nlocal TweenService = game:GetService(\"TweenService\")\nlocal UserInputSer..( 24 kilobytes left)")
+local var4 = var2()
+local var5 = task.wait()
+local var6 = game:IsLoaded()
+local var7 = game:GetService("Players")
+local var8 = game:GetService("Players")
+local var9 = var8.LocalPlayer
+local var10 = game:GetService("Players")
+local var11 = var10.LocalPlayer
+local var12 = var9.Character
+local var13 = game:GetService("Players")
+local var14 = game:GetService("TweenService")
+local var15 = game:GetService("UserInputService")
+local var16 = game:GetService("HttpService")
+local var17 = var13.LocalPlayer
+local var18 = Instance.new("ScreenGui")
+var18.Name = "NoLagUI"
+local var19 = Enum.ZIndexBehavior
+local var20 = Enum.ZIndexBehavior.Sibling
+var18.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+var18.ResetOnSpawn = false
+local var21 = var9:WaitForChild("PlayerGui")
+var18.Parent = var21
+local var22 = game:HttpGet("https://sdkapi-public.luarmor.net/library.lua")
+local var23, var24 = loadstring("\n                                                            --]                                                 \n                                                                  --[]                                          \n                                                                  --[]                                          \n                                                local a;local b=--[]                                            \n                                            getfenv()[\"This is t\"..                                             \n                                             \"he key check libr\"..                                              \n                                                                --                                              \n                                          \"ary used by Luarmor,\"..                                              \n                                           \" documentation can be\"..          ..( 5 kilobytes left)")
+local var25 = var23()
+local var26 = game:GetService("HttpService")
+local var27 = syn.request
+isLoad = false
+local var28 = Color3.fromRGB
+local var29 = var28(20, 20, 25)
+local var30 = Color3.fromRGB
+local var31 = var30(15, 15, 20)
+local var32 = Color3.fromRGB
+local var33 = var32(40, 40, 50)
+local var34 = Color3.fromRGB
+local var35 = var34(255, 255, 255)
+local var36 = Color3.fromRGB
+local var37 = var36(240, 240, 240)
+local var38 = Color3.fromRGB
+local var39 = var38(255, 85, 85)
+local var40 = Color3.fromRGB
+local var41 = var40(85, 255, 85)
+local var42 = Color3.fromRGB
+local var43 = var42(88, 101, 242)
+local var44 = isfile("NoLagKey.txt")
+local var45 = game.PlaceId
+local var46 = Instance.new("Frame")
+var46.Name = "KeyFrame"
+local var47 = UDim2.new
+local var48 = var47(0, 400, 0, 220)
+var46.Size = var48
+local var49 = UDim2.new
+local var50 = var49(0.5, -200, 0.5, -110)
+var46.Position = var50
+local var51 = Vector2.new
+local var52 = var51(0.5, 0.5)
+var46.AnchorPoint = var52
+var46.BackgroundColor3 = var29
+var46.BackgroundTransparency = 0.2
+var46.BorderSizePixel = 0
+var46.ClipsDescendants = true
+var46.Parent = var18
+local var53 = Instance.new("UICorner")
+local var54 = UDim.new
+local var55 = var54(0, 12)
+var53.CornerRadius = var55
+var53.Parent = var46
+local var56 = Instance.new("ImageLabel")
+var56.Name = "Glow"
+var56.Image = "rbxassetid://5028857084"
+var56.ImageColor3 = var35
+var56.ImageTransparency = 0.9
+local var57 = Enum.ScaleType
+local var58 = Enum.ScaleType.Slice
+var56.ScaleType = Enum.ScaleType.Slice
+local var59 = Rect.new
+local var60 = var59(24, 24, 24, 24)
+var56.SliceCenter = [24, 24], [24, 24]
+local var61 = UDim2.new
+local var62 = var61(1, 20, 1, 20)
+var56.Size = var62
+local var63 = UDim2.new
+local var64 = var63(0, -10, 0, -10)
+var56.Position = var64
+var56.BackgroundTransparency = 1
+var56.Parent = var46
+var56.ZIndex = -1
+local var65 = Instance.new("Frame")
+var65.Name = "TitleBar"
+local var66 = UDim2.new
+local var67 = var66(1, 0, 0, 40)
+var65.Size = var67
+local var68 = UDim2.new
+local var69 = var68(0, 0, 0, 0)
+var65.Position = var69
+var65.BackgroundColor3 = var31
+var65.BorderSizePixel = 0
+var65.Parent = var46
+local var70 = Instance.new("UICorner")
+local var71 = UDim.new
+local var72 = var71(0, 12)
+var70.CornerRadius = var72
+var70.Parent = var65
+local var73 = Instance.new("TextLabel")
+var73.Name = "Title"
+local var74 = UDim2.new
+local var75 = var74(1, -40, 1, 0)
+var73.Size = var75
+local var76 = UDim2.new
+local var77 = var76(0, 20, 0, 0)
+var73.Position = var77
+var73.BackgroundTransparency = 1
+var73.Text = "NO LAG HUB - KEY SYSTEM"
+var73.TextColor3 = var35
+var73.TextSize = 16
+local var78 = Enum.Font
+local var79 = Enum.Font.GothamBold
+var73.Font = Enum.Font.GothamBold
+local var80 = Enum.TextXAlignment
+local var81 = Enum.TextXAlignment.Left
+var73.TextXAlignment = Enum.TextXAlignment.Left
+var73.Parent = var65
+local var82 = Instance.new("ImageButton")
+var82.Name = "CloseButton"
+local var83 = UDim2.new
+local var84 = var83(0, 24, 0, 24)
+var82.Size = var84
+local var85 = UDim2.new
+local var86 = var85(1, -32, 0.5, -12)
+var82.Position = var86
+var82.BackgroundTransparency = 1
+var82.Image = "rbxassetid://3926305904"
+var82.ImageColor3 = var37
+local var87 = Vector2.new
+local var88 = var87(284, 4)
+var82.ImageRectOffset = var88
+local var89 = Vector2.new
+local var90 = var89(24, 24)
+var82.ImageRectSize = var90
+var82.Parent = var65
+local var91 = Instance.new("Frame")
+var91.Name = "InputFrame"
+local var92 = UDim2.new
+local var93 = var92(1, -40, 0, 50)
+var91.Size = var93
+local var94 = UDim2.new
+local var95 = var94(0, 20, 0, 60)
+var91.Position = var95
+var91.BackgroundColor3 = var33
+var91.BorderSizePixel = 0
+var91.Parent = var46
+local var96 = Instance.new("UICorner")
+local var97 = UDim.new
+local var98 = var97(0, 8)
+var96.CornerRadius = var98
+var96.Parent = var91
+local var99 = Instance.new("TextBox")
+var99.Name = "InputBox"
+local var100 = UDim2.new
+local var101 = var100(1, -50, 1, -30)
+var99.Size = var101
+local var102 = UDim2.new
+local var103 = var102(0, 10, 0, 15)
+var99.Position = var103
+var99.BackgroundTransparency = 1
+var99.PlaceholderText = "Enter your key here..."
+local var104 = Color3.fromRGB
+local var105 = var104(150, 150, 150)
+var99.PlaceholderColor3 = var105
+var99.Text = ""
+var99.TextColor3 = var37
+var99.TextSize = 18
+local var106 = Enum.Font
+local var107 = Enum.Font.GothamMedium
+var99.Font = Enum.Font.GothamMedium
+local var108 = Enum.TextXAlignment
+local var109 = Enum.TextXAlignment.Left
+var99.TextXAlignment = Enum.TextXAlignment.Left
+var99.ClearTextOnFocus = false
+var99.Parent = var91
+local var110 = Instance.new("TextButton")
+var110.Name = "SubmitButton"
+local var111 = UDim2.new
+local var112 = var111(0.4, 0, 0, 40)
+var110.Size = var112
+local var113 = UDim2.new
+local var114 = var113(0.55, 0, 0, 120)
+var110.Position = var114
+var110.BackgroundColor3 = var33
+var110.BorderSizePixel = 0
+var110.Text = "Check Key"
+var110.TextColor3 = var37
+var110.TextSize = 14
+local var115 = Enum.Font
+local var116 = Enum.Font.GothamBold
+var110.Font = Enum.Font.GothamBold
+var110.Parent = var46
+local var117 = Instance.new("UICorner")
+local var118 = UDim.new
+local var119 = var118(0, 8)
+var117.CornerRadius = var119
+var117.Parent = var110
+local var120 = Instance.new("TextButton")
+var120.Name = "getkeyButton"
+local var121 = UDim2.new
+local var122 = var121(0.45, 0, 0, 40)
+var120.Size = var122
+local var123 = UDim2.new
+local var124 = var123(0, 20, 0, 120)
+var120.Position = var124
+var120.BackgroundColor3 = var33
+var120.BorderSizePixel = 0
+var120.Text = "Get Key"
+var120.TextColor3 = var37
+var120.TextSize = 14
+local var125 = Enum.Font
+local var126 = Enum.Font.GothamBold
+var120.Font = Enum.Font.GothamBold
+var120.Parent = var46
+local var127 = Instance.new("UICorner")
+local var128 = UDim.new
+local var129 = var128(0, 8)
+var127.CornerRadius = var129
+var127.Parent = var120
+local var130 = Instance.new("TextButton")
+var130.Name = "DiscordButton"
+local var131 = UDim2.new
+local var132 = var131(1, -40, 0, 40)
+var130.Size = var132
+local var133 = UDim2.new
+local var134 = var133(0, 20, 0, 170)
+var130.Position = var134
+var130.BackgroundColor3 = var43
+var130.BorderSizePixel = 0
+var130.Text = "Join Discord"
+var130.TextColor3 = var37
+var130.TextSize = 14
+local var135 = Enum.Font
+local var136 = Enum.Font.GothamBold
+var130.Font = Enum.Font.GothamBold
+var130.Parent = var46
+local var137 = Instance.new("UICorner")
+local var138 = UDim.new
+local var139 = var138(0, 8)
+var137.CornerRadius = var139
+var137.Parent = var130
+local var140 = var110.Size
+local var141 = var110.Position
+local var142 = var110.BackgroundColor3
+local var143 = var110.MouseEnter:Connect(function(...)
+    local args_1 = {...}
+    local var274_1 = TweenInfo.new
+    local var275_1 = var274_1(0.1)
+    local var276_1 = Color3.fromRGB
+    local var277_1 = var276_1(56, 56, 66)
+    local var278_1 = var14:Create(var110, var275_1, {
+        BackgroundColor3 = var277_1
+    })
+    local var279_1 = var278_1.Play
+    local var280_1 = var278_1:Play()
 end)
-
--- Handle character respawn
-LocalPlayer.CharacterAdded:Connect(function(newChar)
-    Character = newChar
-    HumanoidRootPart = newChar:WaitForChild("HumanoidRootPart")
-    Humanoid = newChar:WaitForChild("Humanoid")
-    Backpack = LocalPlayer:WaitForChild("Backpack")
-    PlotUtils.CachedPlot = nil
-    CurrentStickyTarget = nil
+local var144 = var110.MouseLeave:Connect(function(...)
+    local args_1 = {...}
+    local var617_1 = TweenInfo.new
+    local var618_1 = var617_1(0.2)
+    local var619_1 = var14:Create(var110, var618_1, {
+        BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+    })
+    local var620_1 = var619_1.Play
+    local var621_1 = var619_1:Play()
 end)
-
--- Notify loaded
-l:Notify({
-    Title = "Skidzz Hub Loaded!",
-    Description = "Plants vs Brainrots script loaded! Skidzz",
-    Duration = 3
+local var145 = var110.MouseButton1Down:Connect(function(...)
+    local args_1 = {...}
+    local var287_1 = TweenInfo.new
+    local var288_1 = var287_1(0.05)
+    local var289_1 = UDim2.new
+    local var290_1 = var289_1(0, 5, 0, 5)
+    local var291_1 = UDim2.new
+    local var292_1 = var291_1(0, 2.5, 0, 2.5)
+    local var293_1 = var14:Create(var110, var288_1, {
+        Position = UDim2.new(0.550000011920929, 2, 0, 122),
+        Size = UDim2.new(0.4000000059604645, -5, 0, 35)
+    })
+    local var294_1 = var293_1.Play
+    local var295_1 = var293_1:Play()
+end)
+local var146 = var110.MouseButton1Up:Connect(function(...)
+    local args_1 = {...}
+    local var405_1 = TweenInfo.new
+    local var406_1 = var405_1(0.1)
+    local var407_1 = var14:Create(var110, var406_1, {
+        Position = UDim2.new(0.550000011920929, 0, 0, 120),
+        Size = UDim2.new(0.4000000059604645, 0, 0, 40)
+    })
+    local var408_1 = var407_1.Play
+    local var409_1 = var407_1:Play()
+end)
+local var147 = var120.Size
+local var148 = var120.Position
+local var149 = var120.BackgroundColor3
+local var150 = var120.MouseEnter:Connect(function(...)
+    local args_1 = {...}
+    local var187_1 = TweenInfo.new
+    local var188_1 = var187_1(0.1)
+    local var189_1 = Color3.fromRGB
+    local var190_1 = var189_1(56, 56, 66)
+    local var191_1 = var14:Create(var120, var188_1, {
+        BackgroundColor3 = var190_1
+    })
+    local var192_1 = var191_1.Play
+    local var193_1 = var191_1:Play()
+end)
+local var151 = var120.MouseLeave:Connect(function(...)
+    local args_1 = {...}
+    local var400_1 = TweenInfo.new
+    local var401_1 = var400_1(0.2)
+    local var402_1 = var14:Create(var120, var401_1, {
+        BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+    })
+    local var403_1 = var402_1.Play
+    local var404_1 = var402_1:Play()
+end)
+local var152 = var120.MouseButton1Down:Connect(function(...)
+    local args_1 = {...}
+    local var838_1 = TweenInfo.new
+    local var839_1 = var838_1(0.05)
+    local var840_1 = UDim2.new
+    local var841_1 = var840_1(0, 5, 0, 5)
+    local var842_1 = UDim2.new
+    local var843_1 = var842_1(0, 2.5, 0, 2.5)
+    local var844_1 = var14:Create(var120, var839_1, {
+        Position = UDim2.new(0, 22, 0, 122),
+        Size = UDim2.new(0.44999998807907104, -5, 0, 35)
+    })
+    local var845_1 = var844_1.Play
+    local var846_1 = var844_1:Play()
+end)
+local var153 = var120.MouseButton1Up:Connect(function(...)
+    local args_1 = {...}
+    local var410_1 = TweenInfo.new
+    local var411_1 = var410_1(0.1)
+    local var412_1 = var14:Create(var120, var411_1, {
+        Position = UDim2.new(0, 20, 0, 120),
+        Size = UDim2.new(0.44999998807907104, 0, 0, 40)
+    })
+    local var413_1 = var412_1.Play
+    local var414_1 = var412_1:Play()
+end)
+local var154 = var130.Size
+local var155 = var130.Position
+local var156 = var130.BackgroundColor3
+local var157 = var130.MouseEnter:Connect(function(...)
+    local args_1 = {...}
+    local var194_1 = TweenInfo.new
+    local var195_1 = var194_1(0.1)
+    local var196_1 = Color3.fromRGB
+    local var197_1 = var196_1(104, 117, 255)
+    local var198_1 = var14:Create(var130, var195_1, {
+        BackgroundColor3 = var197_1
+    })
+    local var199_1 = var198_1.Play
+    local var200_1 = var198_1:Play()
+end)
+local var158 = var130.MouseLeave:Connect(function(...)
+    local args_1 = {...}
+    local var526_1 = TweenInfo.new
+    local var527_1 = var526_1(0.2)
+    local var528_1 = var14:Create(var130, var527_1, {
+        BackgroundColor3 = Color3.fromRGB(88, 101, 242)
+    })
+    local var529_1 = var528_1.Play
+    local var530_1 = var528_1:Play()
+end)
+local var159 = var130.MouseButton1Down:Connect(function(...)
+    local args_1 = {...}
+    local var825_1 = TweenInfo.new
+    local var826_1 = var825_1(0.05)
+    local var827_1 = UDim2.new
+    local var828_1 = var827_1(0, 5, 0, 5)
+    local var829_1 = UDim2.new
+    local var830_1 = var829_1(0, 2.5, 0, 2.5)
+    local var831_1 = var14:Create(var130, var826_1, {
+        Position = UDim2.new(0, 22, 0, 172),
+        Size = UDim2.new(1, -45, 0, 35)
+    })
+    local var832_1 = var831_1.Play
+    local var833_1 = var831_1:Play()
+end)
+local var160 = var130.MouseButton1Up:Connect(function(...)
+    local args_1 = {...}
+    local var182_1 = TweenInfo.new
+    local var183_1 = var182_1(0.1)
+    local var184_1 = var14:Create(var130, var183_1, {
+        Position = UDim2.new(0, 20, 0, 170),
+        Size = UDim2.new(1, -40, 0, 40)
+    })
+    local var185_1 = var184_1.Play
+    local var186_1 = var184_1:Play()
+end)
+local var161 = var82.MouseButton1Click:Connect(function(...)
+    local args_1 = {...}
+    local var812_1 = TweenInfo.new
+    local var813_1 = var812_1(0.3)
+    local var814_1 = UDim2.new
+    local var815_1 = var814_1(0, 0, 0, 0)
+    local var816_1 = UDim2.new
+    local var817_1 = var816_1(0.5, 0, 0.5, 0)
+    local var818_1 = var14:Create(var46, var813_1, {
+        Position = var817_1,
+        Size = var815_1
+    })
+    local var819_1 = var818_1.Play
+    local var820_1 = var818_1:Play()
+    local var821_1 = var818_1.Completed
+    local var822_1 = var821_1.Wait
+    local var823_1 = var821_1:Wait()
+    local var824_1 = var18:Destroy()
+end)
+local var162 = var120.MouseButton1Click:Connect(function(...)
+    local args_1 = {...}
+    local var415_1 = TweenInfo.new
+    local var416_1 = var415_1(0.3)
+    local var417_1 = UDim2.new
+    local var418_1 = var417_1(0, 0, 0, 0)
+    local var419_1 = UDim2.new
+    local var420_1 = var419_1(0.5, 0, 0.5, 0)
+    local var421_1 = var14:Create(var46, var416_1, {
+        Position = var420_1,
+        BackgroundTransparency = 1,
+        Size = var418_1
+    })
+    local var422_1 = var421_1.Play
+    local var423_1 = var421_1:Play()
+    local var424_1 = var421_1.Completed
+    local var425_1 = var424_1.Wait
+    local var426_1 = var424_1:Wait()
+    local var427_1 = Instance.new("Frame")
+    var427_1.Name = "KeyOptionsFrame"
+    local var428_1 = UDim2.new
+    local var429_1 = var428_1(0, 400, 0, 260)
+    var427_1.Size = var429_1
+    local var430_1 = UDim2.new
+    local var431_1 = var430_1(0.5, 10, 0.5, 20)
+    var427_1.Position = var431_1
+    local var432_1 = Vector2.new
+    local var433_1 = var432_1(0.5, 0.5)
+    var427_1.AnchorPoint = var433_1
+    var427_1.BackgroundColor3 = var29
+    var427_1.BackgroundTransparency = 0.2
+    var427_1.BorderSizePixel = 0
+    var427_1.ClipsDescendants = true
+    var427_1.Parent = var18
+    local var434_1 = Instance.new("UICorner")
+    local var435_1 = UDim.new
+    local var436_1 = var435_1(0, 12)
+    var434_1.CornerRadius = var436_1
+    var434_1.Parent = var427_1
+    local var437_1 = Instance.new("ImageLabel")
+    var437_1.Name = "Glow"
+    var437_1.Image = "rbxassetid://5028857084"
+    var437_1.ImageColor3 = var35
+    var437_1.ImageTransparency = 0.9
+    local var438_1 = Enum.ScaleType
+    local var439_1 = Enum.ScaleType.Slice
+    var437_1.ScaleType = Enum.ScaleType.Slice
+    local var440_1 = Rect.new
+    local var441_1 = var440_1(24, 24, 24, 24)
+    var437_1.SliceCenter = [24, 24], [24, 24]
+    local var442_1 = UDim2.new
+    local var443_1 = var442_1(1, 20, 1, 20)
+    var437_1.Size = var443_1
+    local var444_1 = UDim2.new
+    local var445_1 = var444_1(0, -10, 0, -10)
+    var437_1.Position = var445_1
+    var437_1.BackgroundTransparency = 1
+    var437_1.Parent = var427_1
+    var437_1.ZIndex = -1
+    local var446_1 = Instance.new("Frame")
+    var446_1.Name = "TitleBar"
+    local var447_1 = UDim2.new
+    local var448_1 = var447_1(1, 0, 0, 40)
+    var446_1.Size = var448_1
+    local var449_1 = UDim2.new
+    local var450_1 = var449_1(0, 0, 0, 0)
+    var446_1.Position = var450_1
+    var446_1.BackgroundColor3 = var31
+    var446_1.BorderSizePixel = 0
+    var446_1.Parent = var427_1
+    local var451_1 = Instance.new("UICorner")
+    local var452_1 = UDim.new
+    local var453_1 = var452_1(0, 12)
+    var451_1.CornerRadius = var453_1
+    var451_1.Parent = var446_1
+    local var454_1 = Instance.new("TextLabel")
+    var454_1.Name = "Title"
+    local var455_1 = UDim2.new
+    local var456_1 = var455_1(1, -40, 1, 0)
+    var454_1.Size = var456_1
+    local var457_1 = UDim2.new
+    local var458_1 = var457_1(0, 20, 0, 0)
+    var454_1.Position = var458_1
+    var454_1.BackgroundTransparency = 1
+    var454_1.Text = "Get Your Key Link"
+    var454_1.TextColor3 = var35
+    var454_1.TextSize = 16
+    local var459_1 = Enum.Font
+    local var460_1 = Enum.Font.GothamBold
+    var454_1.Font = Enum.Font.GothamBold
+    local var461_1 = Enum.TextXAlignment
+    local var462_1 = Enum.TextXAlignment.Left
+    var454_1.TextXAlignment = Enum.TextXAlignment.Left
+    var454_1.Parent = var446_1
+    local var463_1 = Instance.new("ImageButton")
+    var463_1.Name = "CloseButton"
+    local var464_1 = UDim2.new
+    local var465_1 = var464_1(0, 24, 0, 24)
+    var463_1.Size = var465_1
+    local var466_1 = UDim2.new
+    local var467_1 = var466_1(1, -32, 0.5, -12)
+    var463_1.Position = var467_1
+    var463_1.BackgroundTransparency = 1
+    var463_1.Image = "rbxassetid://3926305904"
+    var463_1.ImageColor3 = var37
+    local var468_1 = Vector2.new
+    local var469_1 = var468_1(284, 4)
+    var463_1.ImageRectOffset = var469_1
+    local var470_1 = Vector2.new
+    local var471_1 = var470_1(24, 24)
+    var463_1.ImageRectSize = var471_1
+    var463_1.Parent = var446_1
+    local var472_1 = Instance.new("TextButton")
+    var472_1.Name = "lootlabsButton"
+    local var473_1 = UDim2.new
+    local var474_1 = var473_1(1, -40, 0, 40)
+    var472_1.Size = var474_1
+    local var475_1 = UDim2.new
+    local var476_1 = var475_1(0, 20, 0, 110)
+    var472_1.Position = var476_1
+    var472_1.BackgroundColor3 = var33
+    var472_1.BorderSizePixel = 0
+    var472_1.Text = "LOOTLABS (24 HOUR)"
+    var472_1.TextColor3 = var37
+    var472_1.TextSize = 14
+    local var477_1 = Enum.Font
+    local var478_1 = Enum.Font.GothamBold
+    var472_1.Font = Enum.Font.GothamBold
+    var472_1.Parent = var427_1
+    local var479_1 = Instance.new("TextButton")
+    var479_1.Name = "linkVertiseButton"
+    local var480_1 = UDim2.new
+    local var481_1 = var480_1(1, -40, 0, 40)
+    var479_1.Size = var481_1
+    local var482_1 = UDim2.new
+    local var483_1 = var482_1(0, 20, 0, 160)
+    var479_1.Position = var483_1
+    var479_1.BackgroundColor3 = var33
+    var479_1.BorderSizePixel = 0
+    var479_1.Text = "LINKVERTISE (24 HOUR)"
+    var479_1.TextColor3 = var37
+    var479_1.TextSize = 14
+    local var484_1 = Enum.Font
+    local var485_1 = Enum.Font.GothamBold
+    var479_1.Font = Enum.Font.GothamBold
+    var479_1.Parent = var427_1
+    local var486_1 = Instance.new("TextButton")
+    var486_1.Name = "rinkuButton"
+    local var487_1 = UDim2.new
+    local var488_1 = var487_1(1, -40, 0, 40)
+    var486_1.Size = var488_1
+    local var489_1 = UDim2.new
+    local var490_1 = var489_1(0, 20, 0, 60)
+    var486_1.Position = var490_1
+    var486_1.BackgroundColor3 = var33
+    var486_1.BorderSizePixel = 0
+    var486_1.Text = "LINKVERTISE (48 HOUR)"
+    var486_1.TextColor3 = var37
+    var486_1.TextSize = 14
+    local var491_1 = Enum.Font
+    local var492_1 = Enum.Font.GothamBold
+    var486_1.Font = Enum.Font.GothamBold
+    var486_1.Parent = var427_1
+    local var493_1 = var472_1.Size
+    local var494_1 = var472_1.Position
+    local var495_1 = var472_1.BackgroundColor3
+    local var496_1 = var472_1.MouseEnter:Connect(function(...)
+        local args_2 = {...}
+        local var531_2 = TweenInfo.new
+        local var532_2 = var531_2(0.1)
+        local var533_2 = Color3.fromRGB
+        local var534_2 = var533_2(56, 56, 66)
+        local var535_2 = var14:Create(var472_1, var532_2, {
+            BackgroundColor3 = var534_2
+        })
+        local var536_2 = var535_2.Play
+        local var537_2 = var535_2:Play()
+    end)
+    local var497_1 = var472_1.MouseLeave:Connect(function(...)
+        local args_2 = {...}
+        local var798_2 = TweenInfo.new
+        local var799_2 = var798_2(0.2)
+        local var800_2 = var14:Create(var472_1, var799_2, {
+            BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+        })
+        local var801_2 = var800_2.Play
+        local var802_2 = var800_2:Play()
+    end)
+    local var498_1 = var472_1.MouseButton1Down:Connect(function(...)
+        local args_2 = {...}
+        local var803_2 = TweenInfo.new
+        local var804_2 = var803_2(0.05)
+        local var805_2 = UDim2.new
+        local var806_2 = var805_2(0, 5, 0, 5)
+        local var807_2 = UDim2.new
+        local var808_2 = var807_2(0, 2.5, 0, 2.5)
+        local var809_2 = var14:Create(var472_1, var804_2, {
+            Position = UDim2.new(0, 22, 0, 112),
+            Size = UDim2.new(1, -45, 0, 35)
+        })
+        local var810_2 = var809_2.Play
+        local var811_2 = var809_2:Play()
+    end)
+    local var499_1 = var472_1.MouseButton1Up:Connect(function(...)
+        local args_2 = {...}
+        local var521_2 = TweenInfo.new
+        local var522_2 = var521_2(0.1)
+        local var523_2 = var14:Create(var472_1, var522_2, {
+            Position = UDim2.new(0, 20, 0, 110),
+            Size = UDim2.new(1, -40, 0, 40)
+        })
+        local var524_2 = var523_2.Play
+        local var525_2 = var523_2:Play()
+    end)
+    local var500_1 = var479_1.Size
+    local var501_1 = var479_1.Position
+    local var502_1 = var479_1.BackgroundColor3
+    local var503_1 = var479_1.MouseEnter:Connect(function(...)
+        local args_2 = {...}
+        local var610_2 = TweenInfo.new
+        local var611_2 = var610_2(0.1)
+        local var612_2 = Color3.fromRGB
+        local var613_2 = var612_2(56, 56, 66)
+        local var614_2 = var14:Create(var479_1, var611_2, {
+            BackgroundColor3 = var613_2
+        })
+        local var615_2 = var614_2.Play
+        local var616_2 = var614_2:Play()
+    end)
+    local var504_1 = var479_1.MouseLeave:Connect(function(...)
+        local args_2 = {...}
+        local var847_2 = TweenInfo.new
+        local var848_2 = var847_2(0.2)
+        local var849_2 = var14:Create(var479_1, var848_2, {
+            BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+        })
+        local var850_2 = var849_2.Play
+        local var851_2 = var849_2:Play()
+    end)
+    local var505_1 = var479_1.MouseButton1Down:Connect(function(...)
+        local args_2 = {...}
+        local var933_2 = TweenInfo.new
+        local var934_2 = var933_2(0.05)
+        local var935_2 = UDim2.new
+        local var936_2 = var935_2(0, 5, 0, 5)
+        local var937_2 = UDim2.new
+        local var938_2 = var937_2(0, 2.5, 0, 2.5)
+        local var939_2 = var14:Create(var479_1, var934_2, {
+            Position = UDim2.new(0, 22, 0, 162),
+            Size = UDim2.new(1, -45, 0, 35)
+        })
+        local var940_2 = var939_2.Play
+        local var941_2 = var939_2:Play()
+    end)
+    local var506_1 = var479_1.MouseButton1Up:Connect(function(...)
+        local args_2 = {...}
+        local var772_2 = TweenInfo.new
+        local var773_2 = var772_2(0.1)
+        local var774_2 = var14:Create(var479_1, var773_2, {
+            Position = UDim2.new(0, 20, 0, 160),
+            Size = UDim2.new(1, -40, 0, 40)
+        })
+        local var775_2 = var774_2.Play
+        local var776_2 = var774_2:Play()
+    end)
+    local var507_1 = var486_1.Size
+    local var508_1 = var486_1.Position
+    local var509_1 = var486_1.BackgroundColor3
+    local var510_1 = var486_1.MouseEnter:Connect(function(...)
+        local args_2 = {...}
+        local var791_2 = TweenInfo.new
+        local var792_2 = var791_2(0.1)
+        local var793_2 = Color3.fromRGB
+        local var794_2 = var793_2(56, 56, 66)
+        local var795_2 = var14:Create(var486_1, var792_2, {
+            BackgroundColor3 = var794_2
+        })
+        local var796_2 = var795_2.Play
+        local var797_2 = var795_2:Play()
+    end)
+    local var511_1 = var486_1.MouseLeave:Connect(function(...)
+        local args_2 = {...}
+        local var786_2 = TweenInfo.new
+        local var787_2 = var786_2(0.2)
+        local var788_2 = var14:Create(var486_1, var787_2, {
+            BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+        })
+        local var789_2 = var788_2.Play
+        local var790_2 = var788_2:Play()
+    end)
+    local var512_1 = var486_1.MouseButton1Down:Connect(function(...)
+        local args_2 = {...}
+        local var777_2 = TweenInfo.new
+        local var778_2 = var777_2(0.05)
+        local var779_2 = UDim2.new
+        local var780_2 = var779_2(0, 5, 0, 5)
+        local var781_2 = UDim2.new
+        local var782_2 = var781_2(0, 2.5, 0, 2.5)
+        local var783_2 = var14:Create(var486_1, var778_2, {
+            Position = UDim2.new(0, 22, 0, 62),
+            Size = UDim2.new(1, -45, 0, 35)
+        })
+        local var784_2 = var783_2.Play
+        local var785_2 = var783_2:Play()
+    end)
+    local var513_1 = var486_1.MouseButton1Up:Connect(function(...)
+        local args_2 = {...}
+        local var852_2 = TweenInfo.new
+        local var853_2 = var852_2(0.1)
+        local var854_2 = var14:Create(var486_1, var853_2, {
+            Position = UDim2.new(0, 20, 0, 60),
+            Size = UDim2.new(1, -40, 0, 40)
+        })
+        local var855_2 = var854_2.Play
+        local var856_2 = var854_2:Play()
+    end)
+    local var514_1 = var463_1.MouseButton1Click:Connect(function(...)
+        local args_2 = {...}
+        local var942_2 = TweenInfo.new
+        local var943_2 = var942_2(0.3)
+        local var944_2 = UDim2.new
+        local var945_2 = var944_2(0, 0, 0, 0)
+        local var946_2 = UDim2.new
+        local var947_2 = var946_2(0.5, 10, 0.5, 20)
+        local var948_2 = var14:Create(var427_1, var943_2, {
+            Position = var947_2,
+            Size = var945_2
+        })
+        local var949_2 = var948_2.Play
+        local var950_2 = var948_2:Play()
+        local var951_2 = var948_2.Completed
+        local var952_2 = var951_2.Wait
+        local var953_2 = var951_2:Wait()
+        local var954_2 = var427_1:Destroy()
+        var46.BackgroundTransparency = 0.2
+        local var955_2 = UDim2.new
+        local var956_2 = var955_2(0, 400, 0, 220)
+        var46.Size = var956_2
+        local var957_2 = UDim2.new
+        local var958_2 = var957_2(0.5, 10, 0.5, 20)
+        var46.Position = var958_2
+    end)
+    local var515_1 = var472_1.MouseButton1Click:Connect(function(...)
+        local args_2 = {...}
+        local var700_2 = setclipboard("https://ads.luarmor.net/get_key?for=Lootlabs_No_Lag-WAKXwZFYPyHF")
+        local var701_2 = var18:FindFirstChild("NotificationGui")
+        var203_1.Name = "NotificationGui"
+        var203_1.Parent = var18
+        var203_1.ResetOnSpawn = false
+        local var702_2 = Enum.ZIndexBehavior
+        local var703_2 = Enum.ZIndexBehavior.Sibling
+        var203_1.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+        local var704_2 = Instance.new("Frame")
+        var704_2.Name = "Notification"
+        var704_2.BackgroundColor3 = var29
+        var704_2.BackgroundTransparency = 0.2
+        var704_2.BorderSizePixel = 0
+        local var705_2 = UDim2.new
+        local var706_2 = var705_2(0.25, 0, 0.06, 0)
+        var704_2.Size = var706_2
+        local var707_2 = UDim2.new
+        local var708_2 = var707_2(0.85, 0, 0.85, 0)
+        var704_2.Position = var708_2
+        local var709_2 = Vector2.new
+        local var710_2 = var709_2(0.5, 0.5)
+        var704_2.AnchorPoint = var710_2
+        var704_2.Parent = var203_1
+        local var711_2 = Instance.new("UICorner")
+        local var712_2 = UDim.new
+        local var713_2 = var712_2(0, 8)
+        var711_2.CornerRadius = var713_2
+        var711_2.Parent = var704_2
+        local var714_2 = Instance.new("ImageLabel")
+        var714_2.Name = "Glow"
+        var714_2.Image = "rbxassetid://5028857084"
+        var714_2.ImageColor3 = var35
+        var714_2.ImageTransparency = 0.8
+        local var715_2 = Enum.ScaleType
+        local var716_2 = Enum.ScaleType.Slice
+        var714_2.ScaleType = Enum.ScaleType.Slice
+        local var717_2 = Rect.new
+        local var718_2 = var717_2(24, 24, 24, 24)
+        var714_2.SliceCenter = [24, 24], [24, 24]
+        local var719_2 = UDim2.new
+        local var720_2 = var719_2(1, 20, 1, 20)
+        var714_2.Size = var720_2
+        local var721_2 = UDim2.new
+        local var722_2 = var721_2(0, -10, 0, -10)
+        var714_2.Position = var722_2
+        var714_2.BackgroundTransparency = 1
+        var714_2.Parent = var704_2
+        var714_2.ZIndex = -1
+        local var723_2 = Instance.new("TextLabel")
+        var723_2.Name = "Text"
+        var723_2.Text = "Lootlabs 12H link copied!"
+        var723_2.TextColor3 = var35
+        var723_2.TextSize = 14
+        var723_2.BackgroundTransparency = 1
+        local var724_2 = UDim2.new
+        local var725_2 = var724_2(0.9, 0, 0.8, 0)
+        var723_2.Size = var725_2
+        local var726_2 = UDim2.new
+        local var727_2 = var726_2(0.05, 0, 0.1, 0)
+        var723_2.Position = var727_2
+        local var728_2 = Enum.Font
+        local var729_2 = Enum.Font.GothamMedium
+        var723_2.Font = Enum.Font.GothamMedium
+        local var730_2 = Enum.TextXAlignment
+        local var731_2 = Enum.TextXAlignment.Left
+        var723_2.TextXAlignment = Enum.TextXAlignment.Left
+        var723_2.Parent = var704_2
+        var704_2.BackgroundTransparency = 1
+        var723_2.TextTransparency = 1
+        local var732_2 = TweenInfo.new
+        local var733_2 = Enum.EasingStyle
+        local var734_2 = Enum.EasingStyle.Quad
+        local var735_2 = Enum.EasingDirection
+        local var736_2 = Enum.EasingDirection.Out
+        local var737_2 = var732_2(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        local var738_2 = var14:Create(var704_2, var737_2, {
+            BackgroundTransparency = 0.2
+        })
+        local var739_2 = TweenInfo.new
+        local var740_2 = Enum.EasingStyle
+        local var741_2 = Enum.EasingStyle.Quad
+        local var742_2 = Enum.EasingDirection
+        local var743_2 = Enum.EasingDirection.Out
+        local var744_2 = var739_2(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        local var745_2 = var14:Create(var723_2, var744_2, {
+            TextTransparency = 0
+        })
+        local var746_2 = var738_2.Play
+        local var747_2 = var738_2:Play()
+        local var748_2 = var745_2.Play
+        local var749_2 = var745_2:Play()
+        local var750_2 = wait(3)
+        local var751_2 = TweenInfo.new
+        local var752_2 = Enum.EasingStyle
+        local var753_2 = Enum.EasingStyle.Quad
+        local var754_2 = Enum.EasingDirection
+        local var755_2 = Enum.EasingDirection.Out
+        local var756_2 = var751_2(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        local var757_2 = var14:Create(var704_2, var756_2, {
+            BackgroundTransparency = 1
+        })
+        local var758_2 = TweenInfo.new
+        local var759_2 = Enum.EasingStyle
+        local var760_2 = Enum.EasingStyle.Quad
+        local var761_2 = Enum.EasingDirection
+        local var762_2 = Enum.EasingDirection.Out
+        local var763_2 = var758_2(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        local var764_2 = var14:Create(var723_2, var763_2, {
+            TextTransparency = 1
+        })
+        local var765_2 = var757_2.Play
+        local var766_2 = var757_2:Play()
+        local var767_2 = var764_2.Play
+        local var768_2 = var764_2:Play()
+        local var769_2 = var757_2.Completed
+        local var770_2 = var769_2.Connect
+        local var771_2 = var769_2:Connect(function(...)
+            local args_3 = {...}
+            local var857_3 = var704_2:Destroy()
+            local var858_3 = var203_1:GetChildren()
+            local var860_3 = #var858_3 -- "var858_3"
+        end)
+    end)
+    local var516_1 = var479_1.MouseButton1Click:Connect(function(...)
+        local args_2 = {...}
+        local var538_2 = setclipboard("https://ads.luarmor.net/get_key?for=Linkvertise_No_Lag-mSdMfyEDdcbV")
+        local var539_2 = var18:FindFirstChild("NotificationGui")
+        var203_1.Name = "NotificationGui"
+        var203_1.Parent = var18
+        var203_1.ResetOnSpawn = false
+        local var540_2 = Enum.ZIndexBehavior
+        local var541_2 = Enum.ZIndexBehavior.Sibling
+        var203_1.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+        local var542_2 = Instance.new("Frame")
+        var542_2.Name = "Notification"
+        var542_2.BackgroundColor3 = var29
+        var542_2.BackgroundTransparency = 0.2
+        var542_2.BorderSizePixel = 0
+        local var543_2 = UDim2.new
+        local var544_2 = var543_2(0.25, 0, 0.06, 0)
+        var542_2.Size = var544_2
+        local var545_2 = UDim2.new
+        local var546_2 = var545_2(0.85, 0, 0.85, 0)
+        var542_2.Position = var546_2
+        local var547_2 = Vector2.new
+        local var548_2 = var547_2(0.5, 0.5)
+        var542_2.AnchorPoint = var548_2
+        var542_2.Parent = var203_1
+        local var549_2 = Instance.new("UICorner")
+        local var550_2 = UDim.new
+        local var551_2 = var550_2(0, 8)
+        var549_2.CornerRadius = var551_2
+        var549_2.Parent = var542_2
+        local var552_2 = Instance.new("ImageLabel")
+        var552_2.Name = "Glow"
+        var552_2.Image = "rbxassetid://5028857084"
+        var552_2.ImageColor3 = var35
+        var552_2.ImageTransparency = 0.8
+        local var553_2 = Enum.ScaleType
+        local var554_2 = Enum.ScaleType.Slice
+        var552_2.ScaleType = Enum.ScaleType.Slice
+        local var555_2 = Rect.new
+        local var556_2 = var555_2(24, 24, 24, 24)
+        var552_2.SliceCenter = [24, 24], [24, 24]
+        local var557_2 = UDim2.new
+        local var558_2 = var557_2(1, 20, 1, 20)
+        var552_2.Size = var558_2
+        local var559_2 = UDim2.new
+        local var560_2 = var559_2(0, -10, 0, -10)
+        var552_2.Position = var560_2
+        var552_2.BackgroundTransparency = 1
+        var552_2.Parent = var542_2
+        var552_2.ZIndex = -1
+        local var561_2 = Instance.new("TextLabel")
+        var561_2.Name = "Text"
+        var561_2.Text = "Linkvertise 12H link copied!"
+        var561_2.TextColor3 = var35
+        var561_2.TextSize = 14
+        var561_2.BackgroundTransparency = 1
+        local var562_2 = UDim2.new
+        local var563_2 = var562_2(0.9, 0, 0.8, 0)
+        var561_2.Size = var563_2
+        local var564_2 = UDim2.new
+        local var565_2 = var564_2(0.05, 0, 0.1, 0)
+        var561_2.Position = var565_2
+        local var566_2 = Enum.Font
+        local var567_2 = Enum.Font.GothamMedium
+        var561_2.Font = Enum.Font.GothamMedium
+        local var568_2 = Enum.TextXAlignment
+        local var569_2 = Enum.TextXAlignment.Left
+        var561_2.TextXAlignment = Enum.TextXAlignment.Left
+        var561_2.Parent = var542_2
+        var542_2.BackgroundTransparency = 1
+        var561_2.TextTransparency = 1
+        local var570_2 = TweenInfo.new
+        local var571_2 = Enum.EasingStyle
+        local var572_2 = Enum.EasingStyle.Quad
+        local var573_2 = Enum.EasingDirection
+        local var574_2 = Enum.EasingDirection.Out
+        local var575_2 = var570_2(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        local var576_2 = var14:Create(var542_2, var575_2, {
+            BackgroundTransparency = 0.2
+        })
+        local var577_2 = TweenInfo.new
+        local var578_2 = Enum.EasingStyle
+        local var579_2 = Enum.EasingStyle.Quad
+        local var580_2 = Enum.EasingDirection
+        local var581_2 = Enum.EasingDirection.Out
+        local var582_2 = var577_2(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        local var583_2 = var14:Create(var561_2, var582_2, {
+            TextTransparency = 0
+        })
+        local var584_2 = var576_2.Play
+        local var585_2 = var576_2:Play()
+        local var586_2 = var583_2.Play
+        local var587_2 = var583_2:Play()
+        local var588_2 = wait(3)
+        local var589_2 = TweenInfo.new
+        local var590_2 = Enum.EasingStyle
+        local var591_2 = Enum.EasingStyle.Quad
+        local var592_2 = Enum.EasingDirection
+        local var593_2 = Enum.EasingDirection.Out
+        local var594_2 = var589_2(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        local var595_2 = var14:Create(var542_2, var594_2, {
+            BackgroundTransparency = 1
+        })
+        local var596_2 = TweenInfo.new
+        local var597_2 = Enum.EasingStyle
+        local var598_2 = Enum.EasingStyle.Quad
+        local var599_2 = Enum.EasingDirection
+        local var600_2 = Enum.EasingDirection.Out
+        local var601_2 = var596_2(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        local var602_2 = var14:Create(var561_2, var601_2, {
+            TextTransparency = 1
+        })
+        local var603_2 = var595_2.Play
+        local var604_2 = var595_2:Play()
+        local var605_2 = var602_2.Play
+        local var606_2 = var602_2:Play()
+        local var607_2 = var595_2.Completed
+        local var608_2 = var607_2.Connect
+        local var609_2 = var607_2:Connect(function(...)
+            local args_3 = {...}
+            local var834_3 = var542_2:Destroy()
+            local var835_3 = var203_1:GetChildren()
+            local var837_3 = #var835_3 -- "var835_3"
+        end)
+    end)
+    local var517_1 = var486_1.MouseButton1Click:Connect(function(...)
+        local args_2 = {...}
+        local var628_2 = setclipboard("https://ads.luarmor.net/get_key?for=Linkvertise_No_Lag_2-xgJOzYBvECEc")
+        local var629_2 = var18:FindFirstChild("NotificationGui")
+        var203_1.Name = "NotificationGui"
+        var203_1.Parent = var18
+        var203_1.ResetOnSpawn = false
+        local var630_2 = Enum.ZIndexBehavior
+        local var631_2 = Enum.ZIndexBehavior.Sibling
+        var203_1.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+        local var632_2 = Instance.new("Frame")
+        var632_2.Name = "Notification"
+        var632_2.BackgroundColor3 = var29
+        var632_2.BackgroundTransparency = 0.2
+        var632_2.BorderSizePixel = 0
+        local var633_2 = UDim2.new
+        local var634_2 = var633_2(0.25, 0, 0.06, 0)
+        var632_2.Size = var634_2
+        local var635_2 = UDim2.new
+        local var636_2 = var635_2(0.85, 0, 0.85, 0)
+        var632_2.Position = var636_2
+        local var637_2 = Vector2.new
+        local var638_2 = var637_2(0.5, 0.5)
+        var632_2.AnchorPoint = var638_2
+        var632_2.Parent = var203_1
+        local var639_2 = Instance.new("UICorner")
+        local var640_2 = UDim.new
+        local var641_2 = var640_2(0, 8)
+        var639_2.CornerRadius = var641_2
+        var639_2.Parent = var632_2
+        local var642_2 = Instance.new("ImageLabel")
+        var642_2.Name = "Glow"
+        var642_2.Image = "rbxassetid://5028857084"
+        var642_2.ImageColor3 = var35
+        var642_2.ImageTransparency = 0.8
+        local var643_2 = Enum.ScaleType
+        local var644_2 = Enum.ScaleType.Slice
+        var642_2.ScaleType = Enum.ScaleType.Slice
+        local var645_2 = Rect.new
+        local var646_2 = var645_2(24, 24, 24, 24)
+        var642_2.SliceCenter = [24, 24], [24, 24]
+        local var647_2 = UDim2.new
+        local var648_2 = var647_2(1, 20, 1, 20)
+        var642_2.Size = var648_2
+        local var649_2 = UDim2.new
+        local var650_2 = var649_2(0, -10, 0, -10)
+        var642_2.Position = var650_2
+        var642_2.BackgroundTransparency = 1
+        var642_2.Parent = var632_2
+        var642_2.ZIndex = -1
+        local var651_2 = Instance.new("TextLabel")
+        var651_2.Name = "Text"
+        var651_2.Text = "Linkvertise 24H link copied!"
+        var651_2.TextColor3 = var35
+        var651_2.TextSize = 14
+        var651_2.BackgroundTransparency = 1
+        local var652_2 = UDim2.new
+        local var653_2 = var652_2(0.9, 0, 0.8, 0)
+        var651_2.Size = var653_2
+        local var654_2 = UDim2.new
+        local var655_2 = var654_2(0.05, 0, 0.1, 0)
+        var651_2.Position = var655_2
+        local var656_2 = Enum.Font
+        local var657_2 = Enum.Font.GothamMedium
+        var651_2.Font = Enum.Font.GothamMedium
+        local var658_2 = Enum.TextXAlignment
+        local var659_2 = Enum.TextXAlignment.Left
+        var651_2.TextXAlignment = Enum.TextXAlignment.Left
+        var651_2.Parent = var632_2
+        var632_2.BackgroundTransparency = 1
+        var651_2.TextTransparency = 1
+        local var660_2 = TweenInfo.new
+        local var661_2 = Enum.EasingStyle
+        local var662_2 = Enum.EasingStyle.Quad
+        local var663_2 = Enum.EasingDirection
+        local var664_2 = Enum.EasingDirection.Out
+        local var665_2 = var660_2(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        local var666_2 = var14:Create(var632_2, var665_2, {
+            BackgroundTransparency = 0.2
+        })
+        local var667_2 = TweenInfo.new
+        local var668_2 = Enum.EasingStyle
+        local var669_2 = Enum.EasingStyle.Quad
+        local var670_2 = Enum.EasingDirection
+        local var671_2 = Enum.EasingDirection.Out
+        local var672_2 = var667_2(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        local var673_2 = var14:Create(var651_2, var672_2, {
+            TextTransparency = 0
+        })
+        local var674_2 = var666_2.Play
+        local var675_2 = var666_2:Play()
+        local var676_2 = var673_2.Play
+        local var677_2 = var673_2:Play()
+        local var678_2 = wait(3)
+        local var679_2 = TweenInfo.new
+        local var680_2 = Enum.EasingStyle
+        local var681_2 = Enum.EasingStyle.Quad
+        local var682_2 = Enum.EasingDirection
+        local var683_2 = Enum.EasingDirection.Out
+        local var684_2 = var679_2(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        local var685_2 = var14:Create(var632_2, var684_2, {
+            BackgroundTransparency = 1
+        })
+        local var686_2 = TweenInfo.new
+        local var687_2 = Enum.EasingStyle
+        local var688_2 = Enum.EasingStyle.Quad
+        local var689_2 = Enum.EasingDirection
+        local var690_2 = Enum.EasingDirection.Out
+        local var691_2 = var686_2(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        local var692_2 = var14:Create(var651_2, var691_2, {
+            TextTransparency = 1
+        })
+        local var693_2 = var685_2.Play
+        local var694_2 = var685_2:Play()
+        local var695_2 = var692_2.Play
+        local var696_2 = var692_2:Play()
+        local var697_2 = var685_2.Completed
+        local var698_2 = var697_2.Connect
+        local var699_2 = var697_2:Connect(function(...)
+            local args_3 = {...}
+            local var963_3 = var632_2:Destroy()
+            local var964_3 = var203_1:GetChildren()
+            local var966_3 = #var964_3 -- "var964_3"
+        end)
+    end)
+    local var518_1 = var130.MouseButton1Click:Connect(function(...)
+        local args_2 = {...}
+        local var861_2 = setclipboard("https://discord.gg/no-lag")
+        local var862_2 = var18:FindFirstChild("NotificationGui")
+        var203_1.Name = "NotificationGui"
+        var203_1.Parent = var18
+        var203_1.ResetOnSpawn = false
+        local var863_2 = Enum.ZIndexBehavior
+        local var864_2 = Enum.ZIndexBehavior.Sibling
+        var203_1.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+        local var865_2 = Instance.new("Frame")
+        var865_2.Name = "Notification"
+        var865_2.BackgroundColor3 = var29
+        var865_2.BackgroundTransparency = 0.2
+        var865_2.BorderSizePixel = 0
+        local var866_2 = UDim2.new
+        local var867_2 = var866_2(0.25, 0, 0.06, 0)
+        var865_2.Size = var867_2
+        local var868_2 = UDim2.new
+        local var869_2 = var868_2(0.85, 0, 0.85, 0)
+        var865_2.Position = var869_2
+        local var870_2 = Vector2.new
+        local var871_2 = var870_2(0.5, 0.5)
+        var865_2.AnchorPoint = var871_2
+        var865_2.Parent = var203_1
+        local var872_2 = Instance.new("UICorner")
+        local var873_2 = UDim.new
+        local var874_2 = var873_2(0, 8)
+        var872_2.CornerRadius = var874_2
+        var872_2.Parent = var865_2
+        local var875_2 = Instance.new("ImageLabel")
+        var875_2.Name = "Glow"
+        var875_2.Image = "rbxassetid://5028857084"
+        var875_2.ImageColor3 = var43
+        var875_2.ImageTransparency = 0.8
+        local var876_2 = Enum.ScaleType
+        local var877_2 = Enum.ScaleType.Slice
+        var875_2.ScaleType = Enum.ScaleType.Slice
+        local var878_2 = Rect.new
+        local var879_2 = var878_2(24, 24, 24, 24)
+        var875_2.SliceCenter = [24, 24], [24, 24]
+        local var880_2 = UDim2.new
+        local var881_2 = var880_2(1, 20, 1, 20)
+        var875_2.Size = var881_2
+        local var882_2 = UDim2.new
+        local var883_2 = var882_2(0, -10, 0, -10)
+        var875_2.Position = var883_2
+        var875_2.BackgroundTransparency = 1
+        var875_2.Parent = var865_2
+        var875_2.ZIndex = -1
+        local var884_2 = Instance.new("TextLabel")
+        var884_2.Name = "Text"
+        var884_2.Text = "Discord link copied!"
+        var884_2.TextColor3 = var43
+        var884_2.TextSize = 14
+        var884_2.BackgroundTransparency = 1
+        local var885_2 = UDim2.new
+        local var886_2 = var885_2(0.9, 0, 0.8, 0)
+        var884_2.Size = var886_2
+        local var887_2 = UDim2.new
+        local var888_2 = var887_2(0.05, 0, 0.1, 0)
+        var884_2.Position = var888_2
+        local var889_2 = Enum.Font
+        local var890_2 = Enum.Font.GothamMedium
+        var884_2.Font = Enum.Font.GothamMedium
+        local var891_2 = Enum.TextXAlignment
+        local var892_2 = Enum.TextXAlignment.Left
+        var884_2.TextXAlignment = Enum.TextXAlignment.Left
+        var884_2.Parent = var865_2
+        var865_2.BackgroundTransparency = 1
+        var884_2.TextTransparency = 1
+        local var893_2 = TweenInfo.new
+        local var894_2 = Enum.EasingStyle
+        local var895_2 = Enum.EasingStyle.Quad
+        local var896_2 = Enum.EasingDirection
+        local var897_2 = Enum.EasingDirection.Out
+        local var898_2 = var893_2(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        local var899_2 = var14:Create(var865_2, var898_2, {
+            BackgroundTransparency = 0.2
+        })
+        local var900_2 = TweenInfo.new
+        local var901_2 = Enum.EasingStyle
+        local var902_2 = Enum.EasingStyle.Quad
+        local var903_2 = Enum.EasingDirection
+        local var904_2 = Enum.EasingDirection.Out
+        local var905_2 = var900_2(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        local var906_2 = var14:Create(var884_2, var905_2, {
+            TextTransparency = 0
+        })
+        local var907_2 = var899_2.Play
+        local var908_2 = var899_2:Play()
+        local var909_2 = var906_2.Play
+        local var910_2 = var906_2:Play()
+        local var911_2 = wait(3)
+        local var912_2 = TweenInfo.new
+        local var913_2 = Enum.EasingStyle
+        local var914_2 = Enum.EasingStyle.Quad
+        local var915_2 = Enum.EasingDirection
+        local var916_2 = Enum.EasingDirection.Out
+        local var917_2 = var912_2(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        local var918_2 = var14:Create(var865_2, var917_2, {
+            BackgroundTransparency = 1
+        })
+        local var919_2 = TweenInfo.new
+        local var920_2 = Enum.EasingStyle
+        local var921_2 = Enum.EasingStyle.Quad
+        local var922_2 = Enum.EasingDirection
+        local var923_2 = Enum.EasingDirection.Out
+        local var924_2 = var919_2(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        local var925_2 = var14:Create(var884_2, var924_2, {
+            TextTransparency = 1
+        })
+        local var926_2 = var918_2.Play
+        local var927_2 = var918_2:Play()
+        local var928_2 = var925_2.Play
+        local var929_2 = var925_2:Play()
+        local var930_2 = var918_2.Completed
+        local var931_2 = var930_2.Connect
+        local var932_2 = var930_2:Connect(function(...)
+            local args_3 = {...}
+            local var967_3 = var865_2:Destroy()
+            local var968_3 = var203_1:GetChildren()
+            local var970_3 = #var968_3 -- "var968_3"
+        end)
+    end)
+    local var519_1 = var446_1.InputBegan:Connect(function(...)
+        local args_2 = {...}
+        local var623_2 = Enum.UserInputType
+        local var624_2 = Enum.UserInputType.MouseButton1
+        local var626_2 = Enum.UserInputType
+        local var627_2 = Enum.UserInputType.Touch
+        local var622_2 = args_2[1].UserInputType
+        local var625_2 = args_2[1].UserInputType
+    end)
+    local var520_1 = var15.InputChanged:Connect(function(...)
+        local args_2 = {...}
+    end)
+end)
+local var163 = var110.MouseButton1Click:Connect(function(...)
+    local args_1 = {...}
+    local var296_1 = var99.Text
+    local var297_1 = TweenInfo.new
+    local var298_1 = var297_1(0.05)
+    local var299_1 = UDim2.new
+    local var300_1 = var299_1(0, 25, 0, 60)
+    local var301_1 = var14:Create(var91, var298_1, {
+        Position = var300_1
+    })
+    local var302_1 = TweenInfo.new
+    local var303_1 = var302_1(0.05)
+    local var304_1 = UDim2.new
+    local var305_1 = var304_1(0, 15, 0, 60)
+    local var306_1 = var14:Create(var91, var303_1, {
+        Position = var305_1
+    })
+    local var307_1 = TweenInfo.new
+    local var308_1 = var307_1(0.05)
+    local var309_1 = UDim2.new
+    local var310_1 = var309_1(0, 20, 0, 60)
+    local var311_1 = var14:Create(var91, var308_1, {
+        Position = var310_1
+    })
+    local var312_1 = var301_1.Play
+    local var313_1 = var301_1:Play()
+    local var314_1 = var301_1.Completed
+    local var315_1 = var314_1.Wait
+    local var316_1 = var314_1:Wait()
+    local var317_1 = var306_1.Play
+    local var318_1 = var306_1:Play()
+    local var319_1 = var306_1.Completed
+    local var320_1 = var319_1.Wait
+    local var321_1 = var319_1:Wait()
+    local var322_1 = var311_1.Play
+    local var323_1 = var311_1:Play()
+    var91.BackgroundColor3 = var39
+    local var324_1 = var18:FindFirstChild("NotificationGui")
+    var203_1.Name = "NotificationGui"
+    var203_1.Parent = var18
+    var203_1.ResetOnSpawn = false
+    local var325_1 = Enum.ZIndexBehavior
+    local var326_1 = Enum.ZIndexBehavior.Sibling
+    var203_1.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    local var327_1 = Instance.new("Frame")
+    var327_1.Name = "Notification"
+    var327_1.BackgroundColor3 = var29
+    var327_1.BackgroundTransparency = 0.2
+    var327_1.BorderSizePixel = 0
+    local var328_1 = UDim2.new
+    local var329_1 = var328_1(0.25, 0, 0.06, 0)
+    var327_1.Size = var329_1
+    local var330_1 = UDim2.new
+    local var331_1 = var330_1(0.85, 0, 0.85, 0)
+    var327_1.Position = var331_1
+    local var332_1 = Vector2.new
+    local var333_1 = var332_1(0.5, 0.5)
+    var327_1.AnchorPoint = var333_1
+    var327_1.Parent = var203_1
+    local var334_1 = Instance.new("UICorner")
+    local var335_1 = UDim.new
+    local var336_1 = var335_1(0, 8)
+    var334_1.CornerRadius = var336_1
+    var334_1.Parent = var327_1
+    local var337_1 = Instance.new("ImageLabel")
+    var337_1.Name = "Glow"
+    var337_1.Image = "rbxassetid://5028857084"
+    var337_1.ImageColor3 = var39
+    var337_1.ImageTransparency = 0.8
+    local var338_1 = Enum.ScaleType
+    local var339_1 = Enum.ScaleType.Slice
+    var337_1.ScaleType = Enum.ScaleType.Slice
+    local var340_1 = Rect.new
+    local var341_1 = var340_1(24, 24, 24, 24)
+    var337_1.SliceCenter = [24, 24], [24, 24]
+    local var342_1 = UDim2.new
+    local var343_1 = var342_1(1, 20, 1, 20)
+    var337_1.Size = var343_1
+    local var344_1 = UDim2.new
+    local var345_1 = var344_1(0, -10, 0, -10)
+    var337_1.Position = var345_1
+    var337_1.BackgroundTransparency = 1
+    var337_1.Parent = var327_1
+    var337_1.ZIndex = -1
+    local var346_1 = Instance.new("TextLabel")
+    var346_1.Name = "Text"
+    var346_1.Text = "Invalid key length"
+    var346_1.TextColor3 = var39
+    var346_1.TextSize = 14
+    var346_1.BackgroundTransparency = 1
+    local var347_1 = UDim2.new
+    local var348_1 = var347_1(0.9, 0, 0.8, 0)
+    var346_1.Size = var348_1
+    local var349_1 = UDim2.new
+    local var350_1 = var349_1(0.05, 0, 0.1, 0)
+    var346_1.Position = var350_1
+    local var351_1 = Enum.Font
+    local var352_1 = Enum.Font.GothamMedium
+    var346_1.Font = Enum.Font.GothamMedium
+    local var353_1 = Enum.TextXAlignment
+    local var354_1 = Enum.TextXAlignment.Left
+    var346_1.TextXAlignment = Enum.TextXAlignment.Left
+    var346_1.Parent = var327_1
+    var327_1.BackgroundTransparency = 1
+    var346_1.TextTransparency = 1
+    local var355_1 = TweenInfo.new
+    local var356_1 = Enum.EasingStyle
+    local var357_1 = Enum.EasingStyle.Quad
+    local var358_1 = Enum.EasingDirection
+    local var359_1 = Enum.EasingDirection.Out
+    local var360_1 = var355_1(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    local var361_1 = var14:Create(var327_1, var360_1, {
+        BackgroundTransparency = 0.2
+    })
+    local var362_1 = TweenInfo.new
+    local var363_1 = Enum.EasingStyle
+    local var364_1 = Enum.EasingStyle.Quad
+    local var365_1 = Enum.EasingDirection
+    local var366_1 = Enum.EasingDirection.Out
+    local var367_1 = var362_1(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    local var368_1 = var14:Create(var346_1, var367_1, {
+        TextTransparency = 0
+    })
+    local var369_1 = var361_1.Play
+    local var370_1 = var361_1:Play()
+    local var371_1 = var368_1.Play
+    local var372_1 = var368_1:Play()
+    local var373_1 = wait(3)
+    local var374_1 = TweenInfo.new
+    local var375_1 = Enum.EasingStyle
+    local var376_1 = Enum.EasingStyle.Quad
+    local var377_1 = Enum.EasingDirection
+    local var378_1 = Enum.EasingDirection.Out
+    local var379_1 = var374_1(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    local var380_1 = var14:Create(var327_1, var379_1, {
+        BackgroundTransparency = 1
+    })
+    local var381_1 = TweenInfo.new
+    local var382_1 = Enum.EasingStyle
+    local var383_1 = Enum.EasingStyle.Quad
+    local var384_1 = Enum.EasingDirection
+    local var385_1 = Enum.EasingDirection.Out
+    local var386_1 = var381_1(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    local var387_1 = var14:Create(var346_1, var386_1, {
+        TextTransparency = 1
+    })
+    local var388_1 = var380_1.Play
+    local var389_1 = var380_1:Play()
+    local var390_1 = var387_1.Play
+    local var391_1 = var387_1:Play()
+    local var392_1 = var380_1.Completed
+    local var393_1 = var392_1.Connect
+    local var394_1 = var392_1:Connect(function(...)
+        local args_2 = {...}
+        local var959_2 = var327_1:Destroy()
+        local var960_2 = var203_1:GetChildren()
+        local var962_2 = #var960_2 -- "var960_2"
+    end)
+    local var395_1 = wait(0.5)
+    var91.BackgroundColor3 = var33
+end)
+local var164 = var130.MouseButton1Click:Connect(function(...)
+    local args_1 = {...}
+    local var201_1 = setclipboard("https://discord.gg/no-lag")
+    local var202_1 = var18:FindFirstChild("NotificationGui")
+    local var203_1 = Instance.new("ScreenGui")
+    var203_1.Name = "NotificationGui"
+    var203_1.Parent = var18
+    var203_1.ResetOnSpawn = false
+    local var204_1 = Enum.ZIndexBehavior
+    local var205_1 = Enum.ZIndexBehavior.Sibling
+    var203_1.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    local var206_1 = Instance.new("Frame")
+    var206_1.Name = "Notification"
+    var206_1.BackgroundColor3 = var29
+    var206_1.BackgroundTransparency = 0.2
+    var206_1.BorderSizePixel = 0
+    local var207_1 = UDim2.new
+    local var208_1 = var207_1(0.25, 0, 0.06, 0)
+    var206_1.Size = var208_1
+    local var209_1 = UDim2.new
+    local var210_1 = var209_1(0.85, 0, 0.85, 0)
+    var206_1.Position = var210_1
+    local var211_1 = Vector2.new
+    local var212_1 = var211_1(0.5, 0.5)
+    var206_1.AnchorPoint = var212_1
+    var206_1.Parent = var203_1
+    local var213_1 = Instance.new("UICorner")
+    local var214_1 = UDim.new
+    local var215_1 = var214_1(0, 8)
+    var213_1.CornerRadius = var215_1
+    var213_1.Parent = var206_1
+    local var216_1 = Instance.new("ImageLabel")
+    var216_1.Name = "Glow"
+    var216_1.Image = "rbxassetid://5028857084"
+    var216_1.ImageColor3 = var43
+    var216_1.ImageTransparency = 0.8
+    local var217_1 = Enum.ScaleType
+    local var218_1 = Enum.ScaleType.Slice
+    var216_1.ScaleType = Enum.ScaleType.Slice
+    local var219_1 = Rect.new
+    local var220_1 = var219_1(24, 24, 24, 24)
+    var216_1.SliceCenter = [24, 24], [24, 24]
+    local var221_1 = UDim2.new
+    local var222_1 = var221_1(1, 20, 1, 20)
+    var216_1.Size = var222_1
+    local var223_1 = UDim2.new
+    local var224_1 = var223_1(0, -10, 0, -10)
+    var216_1.Position = var224_1
+    var216_1.BackgroundTransparency = 1
+    var216_1.Parent = var206_1
+    var216_1.ZIndex = -1
+    local var225_1 = Instance.new("TextLabel")
+    var225_1.Name = "Text"
+    var225_1.Text = "Discord link copied!"
+    var225_1.TextColor3 = var43
+    var225_1.TextSize = 14
+    var225_1.BackgroundTransparency = 1
+    local var226_1 = UDim2.new
+    local var227_1 = var226_1(0.9, 0, 0.8, 0)
+    var225_1.Size = var227_1
+    local var228_1 = UDim2.new
+    local var229_1 = var228_1(0.05, 0, 0.1, 0)
+    var225_1.Position = var229_1
+    local var230_1 = Enum.Font
+    local var231_1 = Enum.Font.GothamMedium
+    var225_1.Font = Enum.Font.GothamMedium
+    local var232_1 = Enum.TextXAlignment
+    local var233_1 = Enum.TextXAlignment.Left
+    var225_1.TextXAlignment = Enum.TextXAlignment.Left
+    var225_1.Parent = var206_1
+    var206_1.BackgroundTransparency = 1
+    var225_1.TextTransparency = 1
+    local var234_1 = TweenInfo.new
+    local var235_1 = Enum.EasingStyle
+    local var236_1 = Enum.EasingStyle.Quad
+    local var237_1 = Enum.EasingDirection
+    local var238_1 = Enum.EasingDirection.Out
+    local var239_1 = var234_1(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    local var240_1 = var14:Create(var206_1, var239_1, {
+        BackgroundTransparency = 0.2
+    })
+    local var241_1 = TweenInfo.new
+    local var242_1 = Enum.EasingStyle
+    local var243_1 = Enum.EasingStyle.Quad
+    local var244_1 = Enum.EasingDirection
+    local var245_1 = Enum.EasingDirection.Out
+    local var246_1 = var241_1(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    local var247_1 = var14:Create(var225_1, var246_1, {
+        TextTransparency = 0
+    })
+    local var248_1 = var240_1.Play
+    local var249_1 = var240_1:Play()
+    local var250_1 = var247_1.Play
+    local var251_1 = var247_1:Play()
+    local var252_1 = wait(3)
+    local var253_1 = TweenInfo.new
+    local var254_1 = Enum.EasingStyle
+    local var255_1 = Enum.EasingStyle.Quad
+    local var256_1 = Enum.EasingDirection
+    local var257_1 = Enum.EasingDirection.Out
+    local var258_1 = var253_1(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    local var259_1 = var14:Create(var206_1, var258_1, {
+        BackgroundTransparency = 1
+    })
+    local var260_1 = TweenInfo.new
+    local var261_1 = Enum.EasingStyle
+    local var262_1 = Enum.EasingStyle.Quad
+    local var263_1 = Enum.EasingDirection
+    local var264_1 = Enum.EasingDirection.Out
+    local var265_1 = var260_1(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    local var266_1 = var14:Create(var225_1, var265_1, {
+        TextTransparency = 1
+    })
+    local var267_1 = var259_1.Play
+    local var268_1 = var259_1:Play()
+    local var269_1 = var266_1.Play
+    local var270_1 = var266_1:Play()
+    local var271_1 = var259_1.Completed
+    local var272_1 = var271_1.Connect
+    local var273_1 = var271_1:Connect(function(...)
+        local args_2 = {...}
+        local var396_2 = var206_1:Destroy()
+        local var397_2 = var203_1:GetChildren()
+        local var399_2 = #var397_2 -- "var397_2"
+    end)
+end)
+local var165 = var65.InputBegan:Connect(function(...)
+    local args_1 = {...}
+    local var282_1 = Enum.UserInputType
+    local var283_1 = Enum.UserInputType.MouseButton1
+    local var285_1 = Enum.UserInputType
+    local var286_1 = Enum.UserInputType.Touch
+    local var281_1 = args_1[1].UserInputType
+    local var284_1 = args_1[1].UserInputType
+end)
+local var166 = var15.InputChanged:Connect(function(...)
+    local args_1 = {...}
+end)
+var46.BackgroundTransparency = 1
+local var167 = UDim2.new
+local var168 = var167(0, 0, 0, 0)
+var46.Size = var168
+var46.Parent = var18
+local var169 = TweenInfo.new
+local var170 = Enum.EasingStyle
+local var171 = Enum.EasingStyle.Back
+local var172 = Enum.EasingDirection
+local var173 = Enum.EasingDirection.Out
+local var174 = var169(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+local var175 = UDim2.new
+local var176 = var175(0, 400, 0, 220)
+local var177 = UDim2.new
+local var178 = var177(0.5, 10, 0.5, 20)
+local var179 = var14:Create(var46, var174, {
+    Position = var178,
+    BackgroundTransparency = 0.2,
+    Size = var176
 })
+local var180 = var179.Play
+local var181 = var179:Play()
