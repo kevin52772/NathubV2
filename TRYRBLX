@@ -804,11 +804,12 @@ if not success2 then warn("Something Went Wrong [Logs Webhook Error]", err2) end
         end
 
             -- Verify tool is no longer in possession (indicating successful gift)
-        task.wait(0.50) -- Increased wait to confirm gift
-        if tool then
-            tool.Parent = targetPlr.Backpack
-        end
-        return true
+task.wait(0.50)
+if tool and tool.Parent == inventory then
+    warn("Gift may have failed for:", tool.Name)
+    return false
+end
+return true
 
     end
 
