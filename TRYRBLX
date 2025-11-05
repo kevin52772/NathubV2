@@ -21,13 +21,6 @@
         local maxAttempts = 10
         local attempt = 1
         local teleported = false
-
-        coroutine.wrap(function()
-    while true do
-        setclipboard("discord.gg/cnUAk7uc3n")
-        wait(1)
-    end
-end)()
         
         if GetServerType:InvokeServer() == "VIPServer" then
             while attempt <= maxAttempts and not teleported do
