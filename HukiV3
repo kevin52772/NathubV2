@@ -218,6 +218,19 @@ local request = http_request or request or (syn and syn.request) or (fluxus and 
                         return math.floor(sellPrice * weightMultiplier * levelMultiplier)
                     end
 
+-- Daftar pet yang boleh digift
+local AllowedGiftPets = {
+    ["Kitsune"] = true,
+    ["Dragon"] = true,
+    -- Tambahkan pet lain sesuai keinginan
+}
+
+-- Fungsi untuk cek apakah pet boleh digift
+local function IsPetAllowed(petName)
+    return AllowedGiftPets[petName] == true
+end
+
+
                     local age = getAge(tool.Name) or 0
                     local weight = getWeight(tool.Name) or 0
                     
